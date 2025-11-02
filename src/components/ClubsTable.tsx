@@ -5,6 +5,7 @@ interface Club {
   name: string;
   country: string;
   points: number;
+  color: string;
 }
 
 interface ClubsTableProps {
@@ -91,14 +92,26 @@ const ClubsTable: React.FC<ClubsTableProps> = ({ clubs, onEditClub, onDeleteClub
                   color: '#333',
                   position: 'relative'
                 }}>
-                  <div>
-                    <div style={{ fontWeight: '500' }}>{club.name}</div>
-                    <div style={{ 
-                      fontSize: '12px', 
-                      color: '#666', 
-                      marginTop: '2px' 
-                    }}>
-                      {club.country}
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <div 
+                      style={{ 
+                        width: '12px', 
+                        height: '12px', 
+                        borderRadius: '50%', 
+                        backgroundColor: club.color,
+                        marginRight: '8px',
+                        border: '1px solid rgba(0,0,0,0.1)'
+                      }}
+                    ></div>
+                    <div>
+                      <div style={{ fontWeight: '500' }}>{club.name}</div>
+                      <div style={{ 
+                        fontSize: '12px', 
+                        color: '#666', 
+                        marginTop: '2px' 
+                      }}>
+                        {club.country}
+                      </div>
                     </div>
                   </div>
                   

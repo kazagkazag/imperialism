@@ -22,6 +22,7 @@ interface Club {
   name: string;
   country: string;
   points: number;
+  color: string;
 }
 
 interface WorldMapProps {
@@ -54,6 +55,19 @@ const WorldMap: React.FC<WorldMapProps> = ({ onCountryClick, clubs }) => {
 
   const getCountryFill = (geo: any) => {
     const countryName = geo.properties.NAME || geo.properties.name;
+    
+    // Check if this country has a club and use its color
+    const countryClub = countriesWithClubs[countryName];
+    if (countryClub && countryClub.length > 0) {
+      // If selected, show selection color, otherwise use club color
+      if (selectedCountry && countryName === selectedCountry.name) {
+        return '#FF6B6B'; // Red for selected country
+      }
+      if (hoveredCountry && countryName === hoveredCountry) {
+        return '#4ECDC4'; // Teal for hovered country
+      }
+      return countryClub[0].color; // Use the club's color
+    }
     
     if (selectedCountry && countryName === selectedCountry.name) {
       return '#FF6B6B'; // Red for selected country
@@ -244,7 +258,19 @@ const WorldMap: React.FC<WorldMapProps> = ({ onCountryClick, clubs }) => {
                       justifyContent: 'space-between',
                       alignItems: 'center'
                     }}>
-                      <span style={{ fontWeight: '500' }}>{club.name}</span>
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <div 
+                          style={{ 
+                            width: '8px', 
+                            height: '8px', 
+                            borderRadius: '50%', 
+                            backgroundColor: club.color,
+                            marginRight: '6px',
+                            border: '1px solid rgba(0,0,0,0.2)'
+                          }}
+                        ></div>
+                        <span style={{ fontWeight: '500' }}>{club.name}</span>
+                      </div>
                       <span style={{ 
                         fontSize: '11px', 
                         color: '#4ECDC4', 

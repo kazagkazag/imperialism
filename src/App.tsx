@@ -16,6 +16,7 @@ interface Club {
   name: string;
   country: string;
   points: number;
+  color: string;
 }
 
 function App() {
@@ -23,17 +24,36 @@ function App() {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [editingClub, setEditingClub] = useState<Club | null>(null);
 
+  // Generate a random color for a new club
+  const generateRandomColor = (): string => {
+    const colors = [
+      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+      '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+      '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D7BDE2',
+      '#A3E4D7', '#F9E79F', '#FADBD8', '#D5DBDB', '#AED6F1'
+    ];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
+
   const handleCountryClick = (country: CountryClickInfo) => {
     setSelectedCountry(country);
   };
 
   const handleAddClub = (clubName: string) => {
     if (selectedCountry) {
+      // Check if there's already a club in this country
+      const existingClub = clubs.find(club => club.country === selectedCountry.name);
+      if (existingClub) {
+        alert(`W kraju "${selectedCountry.name}" już istnieje klub "${existingClub.name}". Można mieć tylko jeden klub na obszar.`);
+        return;
+      }
+
       const newClub: Club = {
         id: Date.now().toString(), // Simple ID generation
         name: clubName,
         country: selectedCountry.name,
-        points: 0
+        points: 0,
+        color: generateRandomColor()
       };
       setClubs(prevClubs => [...prevClubs, newClub]);
       console.log(`Added club "${clubName}" to ${selectedCountry.name}`);
@@ -118,11 +138,54 @@ function App() {
             </>
           ) : selectedCountry ? (
             <>
-              <AddClubForm 
-                countryName={selectedCountry.name}
-                onAdd={handleAddClub}
-                onCancel={handleCancelForm}
-              />
+              {(() => {
+                const existingClub = clubs.find(club => club.country === selectedCountry.name);
+                if (existingClub) {
+                  return (
+                    <div style={{ padding: '20px 0' }}>
+                      <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>
+                        {selectedCountry.name}
+                      </h3>
+                      <div style={{ 
+                        padding: '15px', 
+                        backgroundColor: '#fff3cd', 
+                        border: '1px solid #ffeaa7', 
+                        borderRadius: '6px',
+                        marginBottom: '20px'
+                      }}>
+                        <p style={{ margin: '0', color: '#856404', fontSize: '14px' }}>
+                          ⚠️ W tym kraju już istnieje klub: <strong>{existingClub.name}</strong>
+                        </p>
+                        <p style={{ margin: '5px 0 0 0', color: '#856404', fontSize: '12px' }}>
+                          Można mieć tylko jeden klub na obszar.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setSelectedCountry(null)}
+                        style={{
+                          padding: '10px 16px',
+                          backgroundColor: '#6c757d',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '14px'
+                        }}
+                      >
+                        Zamknij
+                      </button>
+                    </div>
+                  );
+                } else {
+                  return (
+                    <AddClubForm 
+                      countryName={selectedCountry.name}
+                      onAdd={handleAddClub}
+                      onCancel={handleCancelForm}
+                    />
+                  );
+                }
+              })()}
               <ClubsTable 
                 clubs={clubs} 
                 onEditClub={handleEditClub}

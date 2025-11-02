@@ -11,6 +11,7 @@ interface Club {
   name: string;
   country: string;
   points: number;
+  color: string;
 }
 
 interface SVGWorldMapProps {
@@ -232,45 +233,57 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
   };
 
   // Process SVG content to make countries interactive
-  const processedSvgContent = svgContent.replace(/<path[^>]*>/g, (match) => {
-    // Try to extract country name from various attributes
-    const idMatch = match.match(/id="([^"]*)"/);
-    const classMatch = match.match(/class="([^"]*)"/);
-    const titleMatch = match.match(/title="([^"]*)"/);
-    const dataNameMatch = match.match(/data-name="([^"]*)"/);
+  const getProcessedSvgContent = useCallback(() => {
+    return svgContent.replace(/<path[^>]*>/g, (match) => {
+      // Try to extract country name from various attributes
+      const idMatch = match.match(/id="([^"]*)"/);
+      const classMatch = match.match(/class="([^"]*)"/);
+      const titleMatch = match.match(/title="([^"]*)"/);
+      const dataNameMatch = match.match(/data-name="([^"]*)"/);
 
-    let countryName = "";
-    if (dataNameMatch) countryName = dataNameMatch[1];
-    else if (titleMatch) countryName = titleMatch[1];
-    else if (idMatch)
-      countryName = idMatch[1]
-        .replace(/-/g, " ")
-        .replace(/\b\w/g, (l: string) => l.toUpperCase());
-    else if (classMatch)
-      countryName = classMatch[1]
-        .replace(/-/g, " ")
-        .replace(/\b\w/g, (l: string) => l.toUpperCase());
+      let countryName = "";
+      if (dataNameMatch) countryName = dataNameMatch[1];
+      else if (titleMatch) countryName = titleMatch[1];
+      else if (idMatch)
+        countryName = idMatch[1]
+          .replace(/-/g, " ")
+          .replace(/\b\w/g, (l: string) => l.toUpperCase());
+      else if (classMatch)
+        countryName = classMatch[1]
+          .replace(/-/g, " ")
+          .replace(/\b\w/g, (l: string) => l.toUpperCase());
 
-    if (!countryName) return match;
+      if (!countryName) return match;
 
-    // Determine fill color based on state
-    let fill = "#D6D6DA"; // Default gray
-    if (selectedCountry && countryName === selectedCountry.name) {
-      fill = "#FF6B6B"; // Red for selected country
-    }
-    // Hover effects will be handled by CSS instead of state
+      // Determine fill color based on state
+      let fill = "#D6D6DA"; // Default gray
+      
+      // Check if this country has a club and use its color
+      const countryClub = countriesWithClubs[countryName];
+      if (countryClub && countryClub.length > 0) {
+        fill = countryClub[0].color; // Use the club's color
+      }
+      
+      // Override with selection color if selected
+      if (selectedCountry && countryName === selectedCountry.name) {
+        fill = "#FF6B6B"; // Red for selected country
+      }
+      // Hover effects will be handled by CSS instead of state
 
-    // Add interactive properties (no React event handlers in SVG string)
-    const interactiveProps = `
-        fill="${fill}"
-        stroke="#FFFFFF"
-        stroke-width="0.5"
-        cursor="pointer"
-        data-country="${countryName}"
-      `;
+      // Remove any existing fill attribute and add interactive properties
+      let cleanedMatch = match.replace(/\sfill="[^"]*"/g, '');
+      
+      const interactiveProps = `
+          fill="${fill}"
+          stroke="#FFFFFF"
+          stroke-width="0.5"
+          cursor="pointer"
+          data-country="${countryName}"
+        `;
 
-    return match.replace(">", ` ${interactiveProps}>`);
-  });
+      return cleanedMatch.replace(">", ` ${interactiveProps}>`);
+    });
+  }, [svgContent, countriesWithClubs, selectedCountry]);
 
   if (!svgContent) {
     return (
@@ -444,7 +457,19 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
                           alignItems: "center",
                         }}
                       >
-                        <span style={{ fontWeight: "500" }}>{club.name}</span>
+                        <div style={{ display: "flex", alignItems: "center" }}>
+                          <div 
+                            style={{ 
+                              width: "8px", 
+                              height: "8px", 
+                              borderRadius: "50%", 
+                              backgroundColor: club.color,
+                              marginRight: "6px",
+                              border: "1px solid rgba(0,0,0,0.2)"
+                            }}
+                          ></div>
+                          <span style={{ fontWeight: "500" }}>{club.name}</span>
+                        </div>
                         <span
                           style={{
                             fontSize: "11px",
@@ -548,7 +573,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
             width: "100%",
             height: "100%",
           }}
-          dangerouslySetInnerHTML={{ __html: processedSvgContent }}
+          dangerouslySetInnerHTML={{ __html: getProcessedSvgContent() }}
         />
       </div>
     </div>
