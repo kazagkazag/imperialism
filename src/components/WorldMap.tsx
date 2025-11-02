@@ -16,7 +16,11 @@ interface CountryClickInfo {
   properties: any;
 }
 
-const WorldMap: React.FC = () => {
+interface WorldMapProps {
+  onCountryClick?: (country: CountryClickInfo) => void;
+}
+
+const WorldMap: React.FC<WorldMapProps> = ({ onCountryClick }) => {
   const [selectedCountry, setSelectedCountry] = useState<CountryClickInfo | null>(null);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
 
@@ -27,6 +31,7 @@ const WorldMap: React.FC = () => {
       properties: geo.properties,
     };
     setSelectedCountry(countryInfo);
+    onCountryClick?.(countryInfo);
     console.log('Clicked country:', countryInfo);
   };
 
@@ -51,10 +56,10 @@ const WorldMap: React.FC = () => {
   };
 
   return (
-    <div style={{ width: '100vw', height: '100vh', backgroundColor: '#f8f9fa', position: 'relative' }}>
-      {/* Fixed position info panel in top-right corner */}
+    <div style={{ width: '100%', height: '100vh', backgroundColor: '#f8f9fa', position: 'relative' }}>
+      {/* Fixed position info panel in top-right corner of map area */}
       <div style={{ 
-        position: 'fixed', 
+        position: 'absolute', 
         top: '20px', 
         right: '20px', 
         zIndex: 1000,
@@ -97,7 +102,7 @@ const WorldMap: React.FC = () => {
       <ComposableMap
         projectionConfig={{
           rotate: [-10, 0, 0],
-          scale: 200,
+          scale: 150,
         }}
         style={{ width: '100%', height: '100vh' }}
       >
@@ -137,7 +142,7 @@ const WorldMap: React.FC = () => {
             }
           </Geographies>
         </ZoomableGroup>
-      </ComposableMap>
+        </ComposableMap>
     </div>
   );
 };
