@@ -4,15 +4,25 @@ interface AddClubFormProps {
   countryName: string;
   onAdd: (clubName: string) => void;
   onCancel: () => void;
+  editingClub?: {
+    id: string;
+    name: string;
+  };
+  onSave?: (clubId: string, newName: string) => void;
 }
 
-const AddClubForm: React.FC<AddClubFormProps> = ({ countryName, onAdd, onCancel }) => {
-  const [clubName, setClubName] = useState('');
+const AddClubForm: React.FC<AddClubFormProps> = ({ countryName, onAdd, onCancel, editingClub, onSave }) => {
+  const [clubName, setClubName] = useState(editingClub?.name || '');
+  const isEditing = !!editingClub;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (clubName.trim()) {
-      onAdd(clubName.trim());
+      if (isEditing && editingClub && onSave) {
+        onSave(editingClub.id, clubName.trim());
+      } else {
+        onAdd(clubName.trim());
+      }
       setClubName('');
     }
   };
@@ -20,7 +30,7 @@ const AddClubForm: React.FC<AddClubFormProps> = ({ countryName, onAdd, onCancel 
   return (
     <div style={{ padding: '20px 0' }}>
       <h3 style={{ margin: '0 0 20px 0', color: '#333', fontSize: '18px' }}>
-        Dodaj klub
+        {isEditing ? 'Edytuj klub' : 'Dodaj klub'}
       </h3>
       
       <p style={{ margin: '0 0 15px 0', color: '#666', fontSize: '14px' }}>
@@ -89,7 +99,7 @@ const AddClubForm: React.FC<AddClubFormProps> = ({ countryName, onAdd, onCancel 
               }
             }}
           >
-            Dodaj
+            {isEditing ? 'Zapisz' : 'Dodaj'}
           </button>
           
           <button

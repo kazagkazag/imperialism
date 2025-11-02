@@ -20,6 +20,7 @@ interface Club {
 function App() {
   const [selectedCountry, setSelectedCountry] = useState<CountryClickInfo | null>(null);
   const [clubs, setClubs] = useState<Club[]>([]);
+  const [editingClub, setEditingClub] = useState<Club | null>(null);
 
   const handleCountryClick = (country: CountryClickInfo) => {
     setSelectedCountry(country);
@@ -43,6 +44,40 @@ function App() {
     setSelectedCountry(null);
   };
 
+  const handleEditClub = (clubId: string) => {
+    const clubToEdit = clubs.find(club => club.id === clubId);
+    if (clubToEdit) {
+      setEditingClub(clubToEdit);
+      setSelectedCountry(null); // Close country selection if open
+    }
+  };
+
+  const handleDeleteClub = (clubId: string) => {
+    const clubToDelete = clubs.find(club => club.id === clubId);
+    const clubName = clubToDelete?.name || 'klub';
+    
+    const confirmed = window.confirm(`Czy na pewno chcesz usunąć klub "${clubName}"?`);
+    
+    if (confirmed) {
+      setClubs(prevClubs => prevClubs.filter(club => club.id !== clubId));
+      console.log(`Deleted club with ID: ${clubId}`);
+    }
+  };
+
+  const handleSaveEditedClub = (clubId: string, newName: string) => {
+    setClubs(prevClubs => 
+      prevClubs.map(club => 
+        club.id === clubId ? { ...club, name: newName } : club
+      )
+    );
+    setEditingClub(null); // Close the edit form
+    console.log(`Updated club ${clubId} with new name: ${newName}`);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingClub(null);
+  };
+
   return (
     <div className="App">
       <main style={{ display: 'flex', width: '100vw', height: '100vh' }}>
@@ -62,14 +97,36 @@ function App() {
           boxSizing: 'border-box',
           overflowY: 'auto'
         }}>
-          {selectedCountry ? (
+          {editingClub ? (
+            <>
+              <AddClubForm 
+                countryName={editingClub.country}
+                onAdd={handleAddClub}
+                onCancel={handleCancelEdit}
+                editingClub={{
+                  id: editingClub.id,
+                  name: editingClub.name
+                }}
+                onSave={handleSaveEditedClub}
+              />
+              <ClubsTable 
+                clubs={clubs} 
+                onEditClub={handleEditClub}
+                onDeleteClub={handleDeleteClub}
+              />
+            </>
+          ) : selectedCountry ? (
             <>
               <AddClubForm 
                 countryName={selectedCountry.name}
                 onAdd={handleAddClub}
                 onCancel={handleCancelForm}
               />
-              <ClubsTable clubs={clubs} />
+              <ClubsTable 
+                clubs={clubs} 
+                onEditClub={handleEditClub}
+                onDeleteClub={handleDeleteClub}
+              />
             </>
           ) : (
             <>
@@ -79,7 +136,11 @@ function App() {
                   Kliknij na kraj, aby dodać klub.
                 </p>
               </div>
-              <ClubsTable clubs={clubs} />
+              <ClubsTable 
+                clubs={clubs} 
+                onEditClub={handleEditClub}
+                onDeleteClub={handleDeleteClub}
+              />
             </>
           )}
         </div>
