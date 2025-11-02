@@ -26,8 +26,56 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
   const [svgContent, setSvgContent] = useState<string>("");
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [currentRound, setCurrentRound] = useState<number>(0);
+  const [gameStarted, setGameStarted] = useState<boolean>(false);
+  const [selectedTeam, setSelectedTeam] = useState<Club | null>(null);
+  const [opponentTeam, setOpponentTeam] = useState<Club | null>(null);
+  const [isSelectingOpponent, setIsSelectingOpponent] = useState<boolean>(false);
   // Removed drag state - using WASD controls instead
   const svgContainerRef = useRef<HTMLDivElement>(null);
+
+  // Handle round management
+  const handleRoundAction = () => {
+    if (!gameStarted) {
+      // Start the first round and randomly select a team
+      if (clubs.length < 2) {
+        alert("Nie można rozpocząć gry - potrzeba przynajmniej 2 drużyn!");
+        return;
+      }
+      
+      const randomTeam = clubs[Math.floor(Math.random() * clubs.length)];
+      setSelectedTeam(randomTeam);
+      setGameStarted(true);
+      setCurrentRound(1);
+      setOpponentTeam(null);
+      
+      // Start opponent selection process
+      setIsSelectingOpponent(true);
+      setTimeout(() => {
+        // Filter out the selected team to get remaining opponents
+        const remainingTeams = clubs.filter(club => club.id !== randomTeam.id);
+        const randomOpponent = remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
+        setOpponentTeam(randomOpponent);
+        setIsSelectingOpponent(false);
+      }, 500);
+    } else {
+      // End current round and start next round with new random team
+      const randomTeam = clubs[Math.floor(Math.random() * clubs.length)];
+      setSelectedTeam(randomTeam);
+      setCurrentRound(prev => prev + 1);
+      setOpponentTeam(null);
+      
+      // Start opponent selection process
+      setIsSelectingOpponent(true);
+      setTimeout(() => {
+        // Filter out the selected team to get remaining opponents
+        const remainingTeams = clubs.filter(club => club.id !== randomTeam.id);
+        const randomOpponent = remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
+        setOpponentTeam(randomOpponent);
+        setIsSelectingOpponent(false);
+      }, 500);
+    }
+  };
 
   // Get countries that have clubs
   const countriesWithClubs = clubs.reduce((acc, club) => {
@@ -311,11 +359,105 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
         position: "relative",
       }}
     >
-      {/* Zoom Controls */}
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
+      {/* Main Menu Bar */}
       <div
         style={{
           position: "absolute",
           top: "20px",
+          left: "20px",
+          zIndex: 1000,
+          backgroundColor: "rgba(255, 255, 255, 0.95)",
+          padding: "12px 24px",
+          borderRadius: "8px",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          backdropFilter: "blur(10px)",
+          border: "1px solid rgba(255, 255, 255, 0.2)",
+          display: "flex",
+          alignItems: "center",
+          gap: "16px",
+        }}
+      >
+        {/* Round Counter */}
+        {gameStarted && (
+          <div
+            style={{
+              fontSize: "16px",
+              fontWeight: "600",
+              color: "#333",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <span
+              style={{
+                backgroundColor: "#f8f9fa",
+                padding: "6px 12px",
+                borderRadius: "20px",
+                border: "2px solid #4ECDC4",
+                color: "#4ECDC4",
+                fontSize: "14px",
+              }}
+            >
+              Runda {currentRound}
+            </span>
+          </div>
+        )}
+
+        <button
+          onClick={handleRoundAction}
+          style={{
+            padding: "10px 20px",
+            backgroundColor: gameStarted ? "#FF6B6B" : "#4ECDC4",
+            color: "white",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontSize: "14px",
+            fontWeight: "600",
+            transition: "all 0.2s ease",
+            boxShadow: gameStarted 
+              ? "0 2px 4px rgba(255, 107, 107, 0.3)" 
+              : "0 2px 4px rgba(78, 205, 196, 0.3)",
+          }}
+          onMouseOver={(e) => {
+            if (gameStarted) {
+              (e.target as HTMLButtonElement).style.backgroundColor = "#FF5252";
+              (e.target as HTMLButtonElement).style.boxShadow = "0 4px 8px rgba(255, 107, 107, 0.4)";
+            } else {
+              (e.target as HTMLButtonElement).style.backgroundColor = "#45B7B8";
+              (e.target as HTMLButtonElement).style.boxShadow = "0 4px 8px rgba(78, 205, 196, 0.4)";
+            }
+            (e.target as HTMLButtonElement).style.transform = "translateY(-1px)";
+          }}
+          onMouseOut={(e) => {
+            if (gameStarted) {
+              (e.target as HTMLButtonElement).style.backgroundColor = "#FF6B6B";
+              (e.target as HTMLButtonElement).style.boxShadow = "0 2px 4px rgba(255, 107, 107, 0.3)";
+            } else {
+              (e.target as HTMLButtonElement).style.backgroundColor = "#4ECDC4";
+              (e.target as HTMLButtonElement).style.boxShadow = "0 2px 4px rgba(78, 205, 196, 0.3)";
+            }
+            (e.target as HTMLButtonElement).style.transform = "translateY(0)";
+          }}
+        >
+          {gameStarted ? "Zakończ" : "Rozpocznij"}
+        </button>
+      </div>
+
+      {/* Zoom Controls - Moved to bottom left */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "20px",
           left: "20px",
           zIndex: 1000,
           display: "flex",
@@ -387,6 +529,156 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
           ⌂
         </button>
       </div>
+
+      {/* Game Control/Status Console */}
+      {gameStarted && selectedTeam && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: "20px",
+            left: "80px", // Position next to zoom controls (40px width + 20px gap + 20px margin)
+            right: "20px", // Extend to right edge with margin
+            zIndex: 1000,
+            backgroundColor: "rgba(255, 255, 255, 0.95)",
+            padding: "16px 20px",
+            borderRadius: "8px",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            backdropFilter: "blur(10px)",
+            border: "1px solid rgba(255, 255, 255, 0.2)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "14px",
+              color: "#333",
+            }}
+          >
+            {/* Selected Team */}
+            <div
+              style={{
+                width: "12px",
+                height: "12px",
+                borderRadius: "50%",
+                backgroundColor: selectedTeam.color,
+                border: "1px solid rgba(0,0,0,0.2)",
+                flexShrink: 0,
+              }}
+            ></div>
+            <span style={{ fontWeight: "600" }}>
+              Wybrana drużyna:
+            </span>
+            <span style={{ fontWeight: "500", color: "#555" }}>
+              {selectedTeam.name} ({selectedTeam.country})
+            </span>
+
+            {/* Separator */}
+            <div style={{ 
+              width: "1px", 
+              height: "20px", 
+              backgroundColor: "#ddd", 
+              margin: "0 8px" 
+            }}></div>
+
+            {/* Opponent Selection */}
+            {isSelectingOpponent ? (
+              <>
+                <div
+                  style={{
+                    width: "12px",
+                    height: "12px",
+                    borderRadius: "50%",
+                    backgroundColor: "#f0f0f0",
+                    border: "2px solid #4ECDC4",
+                    animation: "spin 1s linear infinite",
+                    flexShrink: 0,
+                  }}
+                ></div>
+                <span style={{ fontWeight: "600", color: "#4ECDC4" }}>
+                  Losowanie przeciwnika...
+                </span>
+              </>
+            ) : opponentTeam ? (
+              <>
+                <div
+                  style={{
+                    width: "12px",
+                    height: "12px",
+                    borderRadius: "50%",
+                    backgroundColor: opponentTeam.color,
+                    border: "1px solid rgba(0,0,0,0.2)",
+                    flexShrink: 0,
+                  }}
+                ></div>
+                <span style={{ fontWeight: "600" }}>
+                  Wylosowano przeciwnika:
+                </span>
+                <span style={{ fontWeight: "500", color: "#555" }}>
+                  {opponentTeam.name} ({opponentTeam.country})
+                </span>
+
+                {/* Action Buttons */}
+                <div style={{ display: "flex", gap: "8px", marginLeft: "16px" }}>
+                  <button
+                    style={{
+                      padding: "6px 12px",
+                      backgroundColor: "#4ECDC4",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      fontWeight: "600",
+                      transition: "all 0.2s ease",
+                      boxShadow: "0 1px 3px rgba(78, 205, 196, 0.3)",
+                    }}
+                    onMouseOver={(e) => {
+                      (e.target as HTMLButtonElement).style.backgroundColor = "#45B7B8";
+                      (e.target as HTMLButtonElement).style.transform = "translateY(-1px)";
+                      (e.target as HTMLButtonElement).style.boxShadow = "0 2px 6px rgba(78, 205, 196, 0.4)";
+                    }}
+                    onMouseOut={(e) => {
+                      (e.target as HTMLButtonElement).style.backgroundColor = "#4ECDC4";
+                      (e.target as HTMLButtonElement).style.transform = "translateY(0)";
+                      (e.target as HTMLButtonElement).style.boxShadow = "0 1px 3px rgba(78, 205, 196, 0.3)";
+                    }}
+                  >
+                    Wskaz zwycięzcę
+                  </button>
+                  <button
+                    style={{
+                      padding: "6px 12px",
+                      backgroundColor: "#6c757d",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      fontSize: "12px",
+                      fontWeight: "600",
+                      transition: "all 0.2s ease",
+                      boxShadow: "0 1px 3px rgba(108, 117, 125, 0.3)",
+                    }}
+                    onMouseOver={(e) => {
+                      (e.target as HTMLButtonElement).style.backgroundColor = "#5a6268";
+                      (e.target as HTMLButtonElement).style.transform = "translateY(-1px)";
+                      (e.target as HTMLButtonElement).style.boxShadow = "0 2px 6px rgba(108, 117, 125, 0.4)";
+                    }}
+                    onMouseOut={(e) => {
+                      (e.target as HTMLButtonElement).style.backgroundColor = "#6c757d";
+                      (e.target as HTMLButtonElement).style.transform = "translateY(0)";
+                      (e.target as HTMLButtonElement).style.boxShadow = "0 1px 3px rgba(108, 117, 125, 0.3)";
+                    }}
+                  >
+                    Losuj ponownie
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
 
       {/* Fixed position info panel in top-right corner of map area */}
       <div
