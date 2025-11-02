@@ -83,7 +83,7 @@ function App() {
       <main style={{ display: 'flex', width: '100vw', height: '100vh' }}>
         {/* Map area - 3/4 of screen width */}
         <div style={{ width: '75%', height: '100vh' }}>
-          <WorldMap onCountryClick={handleCountryClick} />
+          <WorldMap onCountryClick={handleCountryClick} clubs={clubs} />
         </div>
         
         {/* Sidebar - 1/4 of screen width */}
