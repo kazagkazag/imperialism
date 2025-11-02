@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import './App.css';
 import WorldMap from './components/WorldMap';
+import SVGWorldMap from './components/SVGWorldMap';
 import AddClubForm from './components/AddClubForm';
 import ClubsTable from './components/ClubsTable';
 
@@ -83,7 +84,7 @@ function App() {
       <main style={{ display: 'flex', width: '100vw', height: '100vh' }}>
         {/* Map area - 3/4 of screen width */}
         <div style={{ width: '75%', height: '100vh' }}>
-          <WorldMap onCountryClick={handleCountryClick} clubs={clubs} />
+          <SVGWorldMap onCountryClick={handleCountryClick} clubs={clubs} />
         </div>
         
         {/* Sidebar - 1/4 of screen width */}
