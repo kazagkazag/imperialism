@@ -12,27 +12,124 @@ interface Club {
   country: string;
   points: number;
   color: string;
+  territories: string[]; // Array of country names this team controls
+  isEliminated: boolean; // Whether this team is eliminated
+}
+
+interface GameRound {
+  round: number;
+  selectedTeam: Club;
+  opponentTeam: Club;
+  winner: Club;
 }
 
 interface SVGWorldMapProps {
   onCountryClick?: (country: CountryClickInfo) => void;
   clubs: Club[];
+  onUpdateClub?: (clubId: string, updates: Partial<Club>) => void;
 }
 
-const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
+const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs, onUpdateClub }) => {
   const [selectedCountry, setSelectedCountry] =
     useState<CountryClickInfo | null>(null);
   // Remove hoveredCountry state to prevent re-renders on hover
   const [svgContent, setSvgContent] = useState<string>("");
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [currentRound, setCurrentRound] = useState<number>(0);
-  const [gameStarted, setGameStarted] = useState<boolean>(false);
-  const [selectedTeam, setSelectedTeam] = useState<Club | null>(null);
-  const [opponentTeam, setOpponentTeam] = useState<Club | null>(null);
+  // Load game state from localStorage or initialize with defaults
+  const [currentRound, setCurrentRound] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('imperializm-currentRound');
+      return saved ? JSON.parse(saved) : 0;
+    } catch (error) {
+      return 0;
+    }
+  });
+  
+  const [gameStarted, setGameStarted] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('imperializm-gameStarted');
+      return saved ? JSON.parse(saved) : false;
+    } catch (error) {
+      return false;
+    }
+  });
+  
+  const [selectedTeam, setSelectedTeam] = useState<Club | null>(() => {
+    try {
+      const saved = localStorage.getItem('imperializm-selectedTeam');
+      return saved ? JSON.parse(saved) : null;
+    } catch (error) {
+      return null;
+    }
+  });
+  
+  const [opponentTeam, setOpponentTeam] = useState<Club | null>(() => {
+    try {
+      const saved = localStorage.getItem('imperializm-opponentTeam');
+      return saved ? JSON.parse(saved) : null;
+    } catch (error) {
+      return null;
+    }
+  });
+  
+  const [gameHistory, setGameHistory] = useState<GameRound[]>(() => {
+    try {
+      const saved = localStorage.getItem('imperializm-gameHistory');
+      return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+      return [];
+    }
+  });
+
   const [isSelectingOpponent, setIsSelectingOpponent] = useState<boolean>(false);
+  const [isSelectingWinner, setIsSelectingWinner] = useState<boolean>(false);
+  const [isTransitioningRound, setIsTransitioningRound] = useState<boolean>(false);
   // Removed drag state - using WASD controls instead
   const svgContainerRef = useRef<HTMLDivElement>(null);
+
+  // Save game state to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('imperializm-currentRound', JSON.stringify(currentRound));
+    } catch (error) {
+      console.error('Error saving currentRound to localStorage:', error);
+    }
+  }, [currentRound]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('imperializm-gameStarted', JSON.stringify(gameStarted));
+    } catch (error) {
+      console.error('Error saving gameStarted to localStorage:', error);
+    }
+  }, [gameStarted]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('imperializm-selectedTeam', JSON.stringify(selectedTeam));
+    } catch (error) {
+      console.error('Error saving selectedTeam to localStorage:', error);
+    }
+  }, [selectedTeam]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('imperializm-opponentTeam', JSON.stringify(opponentTeam));
+    } catch (error) {
+      console.error('Error saving opponentTeam to localStorage:', error);
+    }
+  }, [opponentTeam]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('imperializm-gameHistory', JSON.stringify(gameHistory));
+    } catch (error) {
+      console.error('Error saving gameHistory to localStorage:', error);
+    }
+  }, [gameHistory]);
+
+
 
   // Handle opponent reselection
   const handleOpponentReselection = () => {
@@ -43,24 +140,190 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
     setIsSelectingOpponent(true);
     
     setTimeout(() => {
-      // Filter out the selected team to get remaining opponents
-      const remainingTeams = clubs.filter(club => club.id !== selectedTeam.id);
+      // Filter out the selected team and eliminated teams to get remaining opponents
+      const remainingTeams = clubs.filter(club => club.id !== selectedTeam.id && !club.isEliminated);
       const randomOpponent = remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
       setOpponentTeam(randomOpponent);
       setIsSelectingOpponent(false);
     }, 500);
   };
 
+  // Handle winner selection mode
+  const handleSelectWinner = () => {
+    setIsSelectingWinner(true);
+  };
+
+  // Handle winner selection (team or opponent)
+  const handleWinnerSelected = (winner: Club) => {
+    if (!selectedTeam || !opponentTeam) return;
+    
+    const loser = winner.id === selectedTeam.id ? opponentTeam : selectedTeam;
+    
+    console.log('=== BATTLE RESULT ===');
+    console.log('Winner:', winner.name, 'Territories:', winner.territories);
+    console.log('Loser:', loser.name, 'Territories:', loser.territories);
+    
+    // Territory conquest: Winner takes one random territory from loser
+    if (loser.territories.length > 0) {
+      const randomTerritoryIndex = Math.floor(Math.random() * loser.territories.length);
+      const conqueredTerritory = loser.territories[randomTerritoryIndex];
+      
+      // Update winner: add points and territory
+      if (onUpdateClub) {
+        onUpdateClub(winner.id, { 
+          points: winner.points + 1,
+          territories: [...winner.territories, conqueredTerritory]
+        });
+      }
+      
+      // Update loser: remove territory and check elimination
+      const newLoserTerritories = loser.territories.filter((_, index) => index !== randomTerritoryIndex);
+      const isLoserEliminated = newLoserTerritories.length === 0;
+      
+      console.log('Territory conquered:', conqueredTerritory);
+      console.log('Loser territories after loss:', newLoserTerritories);
+      console.log('Is loser eliminated?', isLoserEliminated);
+      
+      if (onUpdateClub) {
+        onUpdateClub(loser.id, {
+          territories: newLoserTerritories,
+          isEliminated: isLoserEliminated
+        });
+      }
+    }
+    
+    // Add round to game history
+    const roundData: GameRound = {
+      round: currentRound,
+      selectedTeam,
+      opponentTeam,
+      winner
+    };
+    
+    setGameHistory(prev => {
+      const newHistory = [roundData, ...prev];
+      // Keep only last 5 rounds
+      return newHistory.slice(0, 5);
+    });
+    
+    // Move to next round and automatically select new teams
+    setIsSelectingWinner(false);
+    setIsTransitioningRound(true); // Disable buttons during transition
+    setCurrentRound(prev => prev + 1);
+    
+    // Start new round with new random teams after a short delay
+    // We need to wait longer to ensure clubs data is updated with elimination status
+    setTimeout(() => {
+      // Force a fresh evaluation of clubs by using a callback
+      setSelectedTeam(null);
+      setOpponentTeam(null);
+      
+      // Set a flag to trigger team selection in useEffect when clubs update
+      setIsTransitioningRound(false);
+      
+      // The actual team selection will happen in the useEffect that watches clubs changes
+    }, 1500); // Longer delay to ensure clubs are updated
+  };
+
+  // Handle cancel winner selection
+  const handleCancelWinnerSelection = () => {
+    setIsSelectingWinner(false);
+  };
+
+  // Refresh team references to ensure they're up to date with current clubs data
+  const refreshTeamReferences = useCallback(() => {
+    if (selectedTeam) {
+      const updatedSelectedTeam = clubs.find(club => club.id === selectedTeam.id);
+      if (updatedSelectedTeam && !updatedSelectedTeam.isEliminated) {
+        setSelectedTeam(updatedSelectedTeam);
+      } else {
+        // Selected team was eliminated, clear it
+        setSelectedTeam(null);
+      }
+    }
+    
+    if (opponentTeam) {
+      const updatedOpponentTeam = clubs.find(club => club.id === opponentTeam.id);
+      if (updatedOpponentTeam && !updatedOpponentTeam.isEliminated) {
+        setOpponentTeam(updatedOpponentTeam);
+      } else {
+        // Opponent team was eliminated, clear it
+        setOpponentTeam(null);
+      }
+    }
+  }, [selectedTeam, opponentTeam, clubs]);
+
+  // Refresh team references whenever clubs data changes
+  useEffect(() => {
+    refreshTeamReferences();
+  }, [clubs, refreshTeamReferences]);
+
+  // Handle new round team selection when clubs data changes and we need new teams
+  useEffect(() => {
+    if (gameStarted && !selectedTeam && !opponentTeam && !isTransitioningRound && clubs.length > 0) {
+      const activeTeams = clubs.filter(club => !club.isEliminated);
+      console.log('=== NEW ROUND TEAM SELECTION (from useEffect) ===');
+      console.log('All clubs:', clubs.map(c => `${c.name} (eliminated: ${c.isEliminated})`));
+      console.log('Active teams:', activeTeams.map(c => c.name));
+      
+      if (activeTeams.length >= 2) {
+        const randomTeam = activeTeams[Math.floor(Math.random() * activeTeams.length)];
+        console.log('Selected team:', randomTeam?.name);
+        setSelectedTeam(randomTeam);
+        
+        // Start opponent selection process
+        setIsSelectingOpponent(true);
+        setTimeout(() => {
+          const remainingTeams = activeTeams.filter(club => club.id !== randomTeam.id);
+          const randomOpponent = remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
+          console.log('Possible opponents:', remainingTeams.map(c => c.name));
+          console.log('Selected opponent:', randomOpponent?.name);
+          setOpponentTeam(randomOpponent);
+          setIsSelectingOpponent(false);
+        }, 500);
+      } else {
+        console.log('Game over - not enough active teams');
+        // Handle game over scenario
+        setGameStarted(false);
+      }
+    }
+  }, [clubs, gameStarted, selectedTeam, opponentTeam, isTransitioningRound]);
+
+  // Debug function to clear localStorage
+  const handleClearGameState = () => {
+    const confirmed = window.confirm(
+      "Czy na pewno chcesz wyczyścić cały stan gry? Spowoduje to utratę wszystkich danych i restart gry."
+    );
+    
+    if (confirmed) {
+      try {
+        // Clear game state from localStorage
+        localStorage.removeItem('imperializm-clubs');
+        localStorage.removeItem('imperializm-currentRound');
+        localStorage.removeItem('imperializm-gameStarted');
+        localStorage.removeItem('imperializm-selectedTeam');
+        localStorage.removeItem('imperializm-opponentTeam');
+        localStorage.removeItem('imperializm-gameHistory');
+        
+        // Reload the page to reset all state
+        window.location.reload();
+      } catch (error) {
+        console.error('Error clearing game state:', error);
+      }
+    }
+  };
+
   // Handle round management
   const handleRoundAction = () => {
     if (!gameStarted) {
       // Start the first round and randomly select a team
-      if (clubs.length < 2) {
-        alert("Nie można rozpocząć gry - potrzeba przynajmniej 2 drużyn!");
+      const activeTeams = clubs.filter(club => !club.isEliminated);
+      if (activeTeams.length < 2) {
+        alert("Nie można rozpocząć gry - potrzeba przynajmniej 2 aktywnych drużyn!");
         return;
       }
       
-      const randomTeam = clubs[Math.floor(Math.random() * clubs.length)];
+      const randomTeam = activeTeams[Math.floor(Math.random() * activeTeams.length)];
       setSelectedTeam(randomTeam);
       setGameStarted(true);
       setCurrentRound(1);
@@ -69,24 +332,24 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
       // Start opponent selection process
       setIsSelectingOpponent(true);
       setTimeout(() => {
-        // Filter out the selected team to get remaining opponents
-        const remainingTeams = clubs.filter(club => club.id !== randomTeam.id);
+        // Filter out the selected team and eliminated teams to get remaining opponents
+        const remainingTeams = clubs.filter(club => club.id !== randomTeam.id && !club.isEliminated);
         const randomOpponent = remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
         setOpponentTeam(randomOpponent);
         setIsSelectingOpponent(false);
       }, 500);
     } else {
-      // End current round and start next round with new random team
-      const randomTeam = clubs[Math.floor(Math.random() * clubs.length)];
+      // Start next round with new random team (don't increment round here, it's done in handleWinnerSelected)
+      const activeTeams = clubs.filter(club => !club.isEliminated);
+      const randomTeam = activeTeams[Math.floor(Math.random() * activeTeams.length)];
       setSelectedTeam(randomTeam);
-      setCurrentRound(prev => prev + 1);
       setOpponentTeam(null);
       
       // Start opponent selection process
       setIsSelectingOpponent(true);
       setTimeout(() => {
-        // Filter out the selected team to get remaining opponents
-        const remainingTeams = clubs.filter(club => club.id !== randomTeam.id);
+        // Filter out the selected team and eliminated teams to get remaining opponents
+        const remainingTeams = clubs.filter(club => club.id !== randomTeam.id && !club.isEliminated);
         const randomOpponent = remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
         setOpponentTeam(randomOpponent);
         setIsSelectingOpponent(false);
@@ -94,13 +357,15 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
     }
   };
 
-  // Get countries that have clubs
+  // Get countries that have clubs (including all territories they control)
   const countriesWithClubs = clubs.reduce((acc, club) => {
-    const country = club.country;
-    if (!acc[country]) {
-      acc[country] = [];
-    }
-    acc[country].push(club);
+    // Add all territories controlled by this club
+    club.territories.forEach(territory => {
+      if (!acc[territory]) {
+        acc[territory] = [];
+      }
+      acc[territory].push(club);
+    });
     return acc;
   }, {} as Record<string, Club[]>);
 
@@ -468,6 +733,36 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
         >
           {gameStarted ? "Zakończ" : "Rozpocznij"}
         </button>
+
+        {/* Debug Button */}
+        <button
+          onClick={handleClearGameState}
+          style={{
+            padding: "8px 12px",
+            backgroundColor: "#dc3545",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "12px",
+            fontWeight: "600",
+            transition: "all 0.2s ease",
+            boxShadow: "0 1px 3px rgba(220, 53, 69, 0.3)",
+          }}
+          onMouseOver={(e) => {
+            (e.target as HTMLButtonElement).style.backgroundColor = "#c82333";
+            (e.target as HTMLButtonElement).style.transform = "translateY(-1px)";
+            (e.target as HTMLButtonElement).style.boxShadow = "0 2px 6px rgba(220, 53, 69, 0.4)";
+          }}
+          onMouseOut={(e) => {
+            (e.target as HTMLButtonElement).style.backgroundColor = "#dc3545";
+            (e.target as HTMLButtonElement).style.transform = "translateY(0)";
+            (e.target as HTMLButtonElement).style.boxShadow = "0 1px 3px rgba(220, 53, 69, 0.3)";
+          }}
+          title="Wyczyść stan gry (debugging)"
+        >
+          🗑️ Reset
+        </button>
       </div>
 
       {/* Zoom Controls - Moved to bottom left */}
@@ -546,6 +841,55 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
           ⌂
         </button>
       </div>
+
+      {/* Game History Log */}
+      {gameHistory.length > 0 && gameStarted && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: `${100 + gameHistory.length * 18}px`, // Position above the game console
+            left: "80px",
+            right: "20px",
+            zIndex: 999,
+            backgroundColor: "rgba(255, 255, 255, 0.90)",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
+            backdropFilter: "blur(5px)",
+            border: "1px solid rgba(255, 255, 255, 0.2)",
+          }}
+        >
+          <div style={{ fontSize: "12px", fontWeight: "600", color: "#666", marginBottom: "4px" }}>
+            Ostatnie rundy:
+          </div>
+          {gameHistory.map((round, index) => (
+            <div
+              key={`${round.round}-${index}`}
+              style={{
+                fontSize: "11px",
+                color: "#555",
+                marginBottom: "2px",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <span style={{ fontWeight: "600" }}>R{round.round}:</span>
+              <span style={{ color: round.selectedTeam.color, fontWeight: "500" }}>
+                {round.selectedTeam.name}
+              </span>
+              <span>vs</span>
+              <span style={{ color: round.opponentTeam.color, fontWeight: "500" }}>
+                {round.opponentTeam.name}
+              </span>
+              <span>→</span>
+              <span style={{ color: round.winner.color, fontWeight: "600" }}>
+                {round.winner.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Game Control/Status Console */}
       {gameStarted && selectedTeam && (
@@ -638,32 +982,137 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
 
                 {/* Action Buttons */}
                 <div style={{ display: "flex", gap: "8px", marginLeft: "16px" }}>
-                  <button
-                    style={{
-                      padding: "6px 12px",
-                      backgroundColor: "#4ECDC4",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "4px",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      fontWeight: "600",
-                      transition: "all 0.2s ease",
-                      boxShadow: "0 1px 3px rgba(78, 205, 196, 0.3)",
-                    }}
-                    onMouseOver={(e) => {
-                      (e.target as HTMLButtonElement).style.backgroundColor = "#45B7B8";
-                      (e.target as HTMLButtonElement).style.transform = "translateY(-1px)";
-                      (e.target as HTMLButtonElement).style.boxShadow = "0 2px 6px rgba(78, 205, 196, 0.4)";
-                    }}
-                    onMouseOut={(e) => {
-                      (e.target as HTMLButtonElement).style.backgroundColor = "#4ECDC4";
-                      (e.target as HTMLButtonElement).style.transform = "translateY(0)";
-                      (e.target as HTMLButtonElement).style.boxShadow = "0 1px 3px rgba(78, 205, 196, 0.3)";
-                    }}
-                  >
-                    Wskaz zwycięzcę
-                  </button>
+                  {!isSelectingWinner ? (
+                    <button
+                      onClick={handleSelectWinner}
+                      style={{
+                        padding: "6px 12px",
+                        backgroundColor: "#4ECDC4",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        transition: "all 0.2s ease",
+                        boxShadow: "0 1px 3px rgba(78, 205, 196, 0.3)",
+                      }}
+                      onMouseOver={(e) => {
+                        (e.target as HTMLButtonElement).style.backgroundColor = "#45B7B8";
+                        (e.target as HTMLButtonElement).style.transform = "translateY(-1px)";
+                        (e.target as HTMLButtonElement).style.boxShadow = "0 2px 6px rgba(78, 205, 196, 0.4)";
+                      }}
+                      onMouseOut={(e) => {
+                        (e.target as HTMLButtonElement).style.backgroundColor = "#4ECDC4";
+                        (e.target as HTMLButtonElement).style.transform = "translateY(0)";
+                        (e.target as HTMLButtonElement).style.boxShadow = "0 1px 3px rgba(78, 205, 196, 0.3)";
+                      }}
+                    >
+                      Wskaz zwycięzcę
+                    </button>
+                  ) : (
+                    <>
+                      {selectedTeam && (
+                        <button
+                          onClick={() => !isTransitioningRound && handleWinnerSelected(selectedTeam)}
+                          disabled={isTransitioningRound}
+                          style={{
+                            padding: "6px 12px",
+                            backgroundColor: isTransitioningRound ? "#ccc" : selectedTeam.color,
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px",
+                            cursor: isTransitioningRound ? "not-allowed" : "pointer",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            transition: "all 0.2s ease",
+                            boxShadow: isTransitioningRound ? "0 1px 3px rgba(204, 204, 204, 0.3)" : `0 1px 3px ${selectedTeam.color}50`,
+                            opacity: isTransitioningRound ? 0.6 : 1,
+                          }}
+                          onMouseOver={(e) => {
+                            if (!isTransitioningRound) {
+                              (e.target as HTMLButtonElement).style.transform = "translateY(-1px)";
+                              (e.target as HTMLButtonElement).style.boxShadow = `0 2px 6px ${selectedTeam.color}70`;
+                            }
+                          }}
+                          onMouseOut={(e) => {
+                            if (!isTransitioningRound) {
+                              (e.target as HTMLButtonElement).style.transform = "translateY(0)";
+                              (e.target as HTMLButtonElement).style.boxShadow = `0 1px 3px ${selectedTeam.color}50`;
+                            }
+                          }}
+                        >
+                          {selectedTeam.name}
+                        </button>
+                      )}
+                      {opponentTeam && (
+                        <button
+                          onClick={() => !isTransitioningRound && handleWinnerSelected(opponentTeam)}
+                          disabled={isTransitioningRound}
+                          style={{
+                            padding: "6px 12px",
+                            backgroundColor: isTransitioningRound ? "#ccc" : opponentTeam.color,
+                            color: "white",
+                            border: "none",
+                            borderRadius: "4px",
+                            cursor: isTransitioningRound ? "not-allowed" : "pointer",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            transition: "all 0.2s ease",
+                            boxShadow: isTransitioningRound ? "0 1px 3px rgba(204, 204, 204, 0.3)" : `0 1px 3px ${opponentTeam.color}50`,
+                            opacity: isTransitioningRound ? 0.6 : 1,
+                          }}
+                          onMouseOver={(e) => {
+                            if (!isTransitioningRound) {
+                              (e.target as HTMLButtonElement).style.transform = "translateY(-1px)";
+                              (e.target as HTMLButtonElement).style.boxShadow = `0 2px 6px ${opponentTeam.color}70`;
+                            }
+                          }}
+                          onMouseOut={(e) => {
+                            if (!isTransitioningRound) {
+                              (e.target as HTMLButtonElement).style.transform = "translateY(0)";
+                              (e.target as HTMLButtonElement).style.boxShadow = `0 1px 3px ${opponentTeam.color}50`;
+                            }
+                          }}
+                        >
+                          {opponentTeam.name}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => !isTransitioningRound && handleCancelWinnerSelection()}
+                        disabled={isTransitioningRound}
+                        style={{
+                          padding: "6px 12px",
+                          backgroundColor: isTransitioningRound ? "#ccc" : "#dc3545",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: isTransitioningRound ? "not-allowed" : "pointer",
+                          fontSize: "12px",
+                          fontWeight: "600",
+                          transition: "all 0.2s ease",
+                          boxShadow: isTransitioningRound ? "0 1px 3px rgba(204, 204, 204, 0.3)" : "0 1px 3px rgba(220, 53, 69, 0.3)",
+                          opacity: isTransitioningRound ? 0.6 : 1,
+                        }}
+                        onMouseOver={(e) => {
+                          if (!isTransitioningRound) {
+                            (e.target as HTMLButtonElement).style.backgroundColor = "#c82333";
+                            (e.target as HTMLButtonElement).style.transform = "translateY(-1px)";
+                            (e.target as HTMLButtonElement).style.boxShadow = "0 2px 6px rgba(220, 53, 69, 0.4)";
+                          }
+                        }}
+                        onMouseOut={(e) => {
+                          if (!isTransitioningRound) {
+                            (e.target as HTMLButtonElement).style.backgroundColor = "#dc3545";
+                            (e.target as HTMLButtonElement).style.transform = "translateY(0)";
+                            (e.target as HTMLButtonElement).style.boxShadow = "0 1px 3px rgba(220, 53, 69, 0.3)";
+                          }
+                        }}
+                      >
+                        Anuluj
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={handleOpponentReselection}
                     style={{

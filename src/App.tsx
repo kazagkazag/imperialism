@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './App.css';
 import WorldMap from './components/WorldMap';
 import SVGWorldMap from './components/SVGWorldMap';
@@ -17,12 +17,33 @@ interface Club {
   country: string;
   points: number;
   color: string;
+  territories: string[]; // Array of country names this team controls
+  isEliminated: boolean; // Whether this team is eliminated
 }
 
 function App() {
   const [selectedCountry, setSelectedCountry] = useState<CountryClickInfo | null>(null);
-  const [clubs, setClubs] = useState<Club[]>([]);
   const [editingClub, setEditingClub] = useState<Club | null>(null);
+
+  // Load clubs from localStorage or initialize empty array
+  const [clubs, setClubs] = useState<Club[]>(() => {
+    try {
+      const savedClubs = localStorage.getItem('imperializm-clubs');
+      return savedClubs ? JSON.parse(savedClubs) : [];
+    } catch (error) {
+      console.error('Error loading clubs from localStorage:', error);
+      return [];
+    }
+  });
+
+  // Save clubs to localStorage whenever clubs state changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('imperializm-clubs', JSON.stringify(clubs));
+    } catch (error) {
+      console.error('Error saving clubs to localStorage:', error);
+    }
+  }, [clubs]);
 
   // Generate a random color for a new club
   const generateRandomColor = (): string => {
@@ -53,7 +74,9 @@ function App() {
         name: clubName,
         country: selectedCountry.name,
         points: 0,
-        color: generateRandomColor()
+        color: generateRandomColor(),
+        territories: [selectedCountry.name], // Initially owns only their starting country
+        isEliminated: false // New teams start active
       };
       setClubs(prevClubs => [...prevClubs, newClub]);
       console.log(`Added club "${clubName}" to ${selectedCountry.name}`);
@@ -99,12 +122,20 @@ function App() {
     setEditingClub(null);
   };
 
+  const handleUpdateClub = (clubId: string, updates: Partial<Club>) => {
+    setClubs(prevClubs => 
+      prevClubs.map(club => 
+        club.id === clubId ? { ...club, ...updates } : club
+      )
+    );
+  };
+
   return (
     <div className="App">
       <main style={{ display: 'flex', width: '100vw', height: '100vh' }}>
         {/* Map area - 3/4 of screen width */}
         <div style={{ width: '75%', height: '100vh' }}>
-          <SVGWorldMap onCountryClick={handleCountryClick} clubs={clubs} />
+          <SVGWorldMap onCountryClick={handleCountryClick} clubs={clubs} onUpdateClub={handleUpdateClub} />
         </div>
         
         {/* Sidebar - 1/4 of screen width */}

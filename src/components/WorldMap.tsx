@@ -23,6 +23,8 @@ interface Club {
   country: string;
   points: number;
   color: string;
+  territories: string[]; // Array of country names this team controls
+  isEliminated: boolean; // Whether this team is eliminated
 }
 
 interface WorldMapProps {

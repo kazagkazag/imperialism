@@ -6,6 +6,8 @@ interface Club {
   country: string;
   points: number;
   color: string;
+  territories: string[]; // Array of country names this team controls
+  isEliminated: boolean; // Whether this team is eliminated
 }
 
 interface ClubsTableProps {
@@ -76,14 +78,18 @@ const ClubsTable: React.FC<ClubsTableProps> = ({ clubs, onEditClub, onDeleteClub
                 key={club.id}
                 style={{ 
                   borderBottom: index < clubs.length - 1 ? '1px solid #f0f0f0' : 'none',
-                  transition: 'background-color 0.2s ease'
+                  transition: 'background-color 0.2s ease',
+                  opacity: club.isEliminated ? 0.5 : 1,
+                  backgroundColor: club.isEliminated ? '#f5f5f5' : 'transparent'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#f8f9fa';
-                  setHoveredRowId(club.id);
+                  if (!club.isEliminated) {
+                    e.currentTarget.style.backgroundColor = '#f8f9fa';
+                    setHoveredRowId(club.id);
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.backgroundColor = club.isEliminated ? '#f5f5f5' : 'transparent';
                   setHoveredRowId(null);
                 }}
               >
@@ -104,13 +110,28 @@ const ClubsTable: React.FC<ClubsTableProps> = ({ clubs, onEditClub, onDeleteClub
                       }}
                     ></div>
                     <div>
-                      <div style={{ fontWeight: '500' }}>{club.name}</div>
+                      <div style={{ fontWeight: '500' }}>
+                        {club.name}
+                        {club.isEliminated && (
+                          <span style={{ 
+                            fontSize: '10px', 
+                            color: '#dc3545', 
+                            marginLeft: '6px',
+                            fontWeight: '600'
+                          }}>
+                            WYELIMINOWANE
+                          </span>
+                        )}
+                      </div>
                       <div style={{ 
                         fontSize: '12px', 
-                        color: '#666', 
+                        color: club.isEliminated ? '#999' : '#666', 
                         marginTop: '2px' 
                       }}>
-                        {club.country}
+                        {club.territories.length === 1 
+                          ? club.territories[0] 
+                          : `${club.territories.length} terytoriów`
+                        }
                       </div>
                     </div>
                   </div>
