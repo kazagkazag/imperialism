@@ -34,6 +34,23 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
   // Removed drag state - using WASD controls instead
   const svgContainerRef = useRef<HTMLDivElement>(null);
 
+  // Handle opponent reselection
+  const handleOpponentReselection = () => {
+    if (!selectedTeam) return;
+    
+    // Reset opponent and start selection process
+    setOpponentTeam(null);
+    setIsSelectingOpponent(true);
+    
+    setTimeout(() => {
+      // Filter out the selected team to get remaining opponents
+      const remainingTeams = clubs.filter(club => club.id !== selectedTeam.id);
+      const randomOpponent = remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
+      setOpponentTeam(randomOpponent);
+      setIsSelectingOpponent(false);
+    }, 500);
+  };
+
   // Handle round management
   const handleRoundAction = () => {
     if (!gameStarted) {
@@ -648,6 +665,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({ onCountryClick, clubs }) => {
                     Wskaz zwycięzcę
                   </button>
                   <button
+                    onClick={handleOpponentReselection}
                     style={{
                       padding: "6px 12px",
                       backgroundColor: "#6c757d",
