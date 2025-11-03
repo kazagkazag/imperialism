@@ -755,8 +755,9 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
 
       if (!countryName) return match;
 
-      // Determine fill color based on state
+      // Determine fill color and opacity based on state
       let fill = "#D6D6DA"; // Default gray
+      let opacity = "1"; // Default full opacity
 
       // Check if this country has a club and use its color
       const countryClub = countriesWithClubs[countryName];
@@ -768,13 +769,26 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       if (selectedCountry && countryName === selectedCountry.name) {
         fill = "#FF6B6B"; // Red for selected country
       }
+
+      // Apply dimming when there's an active match
+      if (selectedTeam && opponentTeam) {
+        const isSelectedTeamTerritory = selectedTeam.territories.includes(countryName);
+        const isOpponentTeamTerritory = opponentTeam.territories.includes(countryName);
+        
+        // Only highlight territories involved in the current match
+        if (!isSelectedTeamTerritory && !isOpponentTeamTerritory) {
+          opacity = "0.3"; // Dim countries not involved in the match
+        }
+      }
+
       // Hover effects will be handled by CSS instead of state
 
-      // Remove any existing fill attribute and add interactive properties
-      let cleanedMatch = match.replace(/\sfill="[^"]*"/g, "");
+      // Remove any existing fill and opacity attributes and add interactive properties
+      let cleanedMatch = match.replace(/\sfill="[^"]*"/g, "").replace(/\sopacity="[^"]*"/g, "");
 
       const interactiveProps = `
           fill="${fill}"
+          opacity="${opacity}"
           stroke="#FFFFFF"
           stroke-width="0.5"
           cursor="pointer"
@@ -783,7 +797,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
 
       return cleanedMatch.replace(">", ` ${interactiveProps}>`);
     });
-  }, [svgContent, countriesWithClubs, selectedCountry]);
+  }, [svgContent, countriesWithClubs, selectedCountry, selectedTeam, opponentTeam]);
 
   if (!svgContent) {
     return (
