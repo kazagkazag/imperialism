@@ -1,4 +1,5 @@
 import React from 'react';
+import './ClubsTable.css';
 
 interface Club {
   id: string;
@@ -20,11 +21,11 @@ const ClubsTable: React.FC<ClubsTableProps> = ({ clubs, onEditClub, onDeleteClub
   const [hoveredRowId, setHoveredRowId] = React.useState<string | null>(null);
   if (clubs.length === 0) {
     return (
-      <div style={{ marginTop: '30px' }}>
-        <h4 style={{ margin: '0 0 15px 0', color: '#333', fontSize: '16px' }}>
+      <div className="clubs-table-container">
+        <h4 className="clubs-table-header">
           Kluby
         </h4>
-        <p style={{ color: '#999', fontSize: '14px', fontStyle: 'italic' }}>
+        <p className="clubs-table-empty">
           Brak dodanych klubów
         </p>
       </div>
@@ -32,42 +33,19 @@ const ClubsTable: React.FC<ClubsTableProps> = ({ clubs, onEditClub, onDeleteClub
   }
 
   return (
-    <div style={{ marginTop: '30px' }}>
-      <h4 style={{ margin: '0 0 15px 0', color: '#333', fontSize: '16px' }}>
+    <div className="clubs-table-container">
+      <h4 className="clubs-table-header">
         Kluby ({clubs.length})
       </h4>
       
-      <div style={{ 
-        border: '1px solid #e0e0e0', 
-        borderRadius: '8px', 
-        overflow: 'hidden',
-        backgroundColor: '#fff'
-      }}>
-        <table style={{ 
-          width: '100%', 
-          borderCollapse: 'collapse',
-          fontSize: '14px'
-        }}>
-          <thead>
-            <tr style={{ 
-              backgroundColor: '#f8f9fa',
-              borderBottom: '2px solid #e0e0e0'
-            }}>
-              <th style={{ 
-                padding: '12px 16px', 
-                textAlign: 'left',
-                fontWeight: '600',
-                color: '#333'
-              }}>
+      <div className="clubs-table-wrapper">
+        <table className="clubs-table">
+          <thead className="clubs-table-head">
+            <tr>
+              <th className="clubs-table-header-cell">
                 Nazwa klubu
               </th>
-              <th style={{ 
-                padding: '12px 16px', 
-                textAlign: 'center',
-                fontWeight: '600',
-                color: '#333',
-                width: '80px'
-              }}>
+              <th className="clubs-table-header-cell center" style={{ width: '80px' }}>
                 Pkt
               </th>
             </tr>

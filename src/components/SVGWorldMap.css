@@ -1,0 +1,547 @@
+/* SVGWorldMap Component Styles */
+
+/* CSS Variables for consistent theming */
+:root {
+  /* Primary brand colors */
+  --primary-teal: #4ECDC4;
+  --primary-teal-hover: #45B7B8;
+  --primary-red: #FF6B6B;
+  --primary-red-hover: #FF5252;
+  
+  /* Secondary colors */
+  --danger-red: #dc3545;
+  --danger-red-hover: #c82333;
+  --secondary-gray: #6c757d;
+  --secondary-gray-hover: #5a6268;
+  --disabled-gray: #ccc;
+  --border-gray: #e0e0e0;
+  
+  /* Text colors */
+  --text-primary: #333;
+  --text-secondary: #555;
+  --text-muted: #666;
+  --text-light: #999;
+  
+  /* Background colors */
+  --bg-light: #f8f9fa;
+  --bg-white: #fff;
+  --bg-white-90: rgba(255, 255, 255, 0.90);
+  --bg-white-95: rgba(255, 255, 255, 0.95);
+  --bg-white-border: rgba(255, 255, 255, 0.2);
+  --bg-divider: #f0f0f0;
+  
+  /* Shadow colors */
+  --shadow-light: rgba(0, 0, 0, 0.1);
+  --shadow-medium: rgba(0, 0, 0, 0.15);
+  --shadow-strong: rgba(0, 0, 0, 0.2);
+  --shadow-dark: rgba(0, 0, 0, 0.3);
+  --shadow-border: rgba(0, 0, 0, 0.2);
+  
+  /* Brand color shadows */
+  --shadow-teal-light: rgba(78, 205, 196, 0.3);
+  --shadow-teal-medium: rgba(78, 205, 196, 0.4);
+  --shadow-red-light: rgba(255, 107, 107, 0.3);
+  --shadow-red-medium: rgba(255, 107, 107, 0.4);
+  --shadow-danger-light: rgba(220, 53, 69, 0.3);
+  --shadow-danger-medium: rgba(220, 53, 69, 0.4);
+  --shadow-gray-light: rgba(108, 117, 125, 0.3);
+  --shadow-gray-medium: rgba(108, 117, 125, 0.4);
+  --shadow-disabled: rgba(204, 204, 204, 0.3);
+  
+  /* Common spacing and sizing */
+  --border-radius-sm: 4px;
+  --border-radius-md: 6px;
+  --border-radius-lg: 8px;
+  --transition-fast: all 0.2s ease;
+  
+  /* SVG specific */
+  --svg-stroke: #FFFFFF;
+}
+
+/* Loading state */
+.svg-world-map-loading {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-light);
+}
+
+/* Main container */
+.svg-world-map-container {
+  width: 100%;
+  height: 100vh;
+  background-color: var(--bg-light);
+  position: relative;
+}
+
+/* Spin animation for loading */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Game History Log */
+.game-history-log {
+  position: absolute;
+  bottom: 120px; /* Position above the game console */
+  left: 80px;
+  right: 20px;
+  z-index: 999;
+  background-color: var(--bg-white-90);
+  padding: 8px 16px;
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 2px 8px var(--shadow-light);
+  backdrop-filter: blur(5px);
+  border: 1px solid var(--bg-white-border);
+}
+
+/* Dynamic height calculation will be done via inline styles for game history */
+
+.game-history-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.game-history-item {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.game-history-round {
+  font-weight: 600;
+}
+
+.game-history-team {
+  font-weight: 500;
+}
+
+.game-history-winner {
+  font-weight: 600;
+}
+
+/* Main Menu Bar */
+.main-menu-bar {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  right: 20px;
+  z-index: 1000;
+  background-color: var(--bg-white-95);
+  padding: 12px 20px;
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 4px 12px var(--shadow-medium);
+  backdrop-filter: blur(5px);
+  border: 1px solid var(--bg-white-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.main-menu-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+/* Round Counter */
+.round-counter {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.round-counter-badge {
+  background-color: var(--bg-light);
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 2px solid var(--primary-teal);
+  color: var(--primary-teal);
+  font-size: 14px;
+}
+
+/* Main Action Button */
+.main-action-button {
+  padding: 10px 20px;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.main-action-button.game-started {
+  background-color: var(--primary-red);
+  box-shadow: 0 2px 4px var(--shadow-red-light);
+}
+
+.main-action-button.game-not-started {
+  background-color: var(--primary-teal);
+  box-shadow: 0 2px 4px var(--shadow-teal-light);
+}
+
+.main-action-button.game-started:hover {
+  background-color: var(--primary-red-hover);
+  box-shadow: 0 4px 8px var(--shadow-red-medium);
+  transform: translateY(-1px);
+}
+
+.main-action-button.game-not-started:hover {
+  background-color: var(--primary-teal-hover);
+  box-shadow: 0 4px 8px var(--shadow-teal-medium);
+  transform: translateY(-1px);
+}
+
+/* Debug Reset Button */
+.debug-reset-button {
+  padding: 8px 12px;
+  background-color: var(--danger-red);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: var(--transition-fast);
+  box-shadow: 0 1px 3px var(--shadow-danger-light);
+}
+
+.debug-reset-button:hover {
+  background-color: var(--danger-red-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px var(--shadow-danger-medium);
+}
+
+/* Zoom Controls */
+.zoom-controls {
+  position: absolute;
+  top: 80px;
+  left: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background-color: rgba(255, 255, 255, 0.9);
+  border: 2px solid var(--primary-teal);
+  border-radius: var(--border-radius-lg);
+  padding: 8px;
+}
+
+.zoom-controls h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: var(--primary-teal);
+  text-align: center;
+}
+
+.zoom-controls:hover {
+  box-shadow: 0 2px 8px var(--shadow-strong);
+}
+
+.zoom-button {
+  background-color: var(--bg-white);
+  border: 2px solid;
+  border-color: var(--primary-teal);
+  color: var(--primary-teal);
+  border-radius: var(--border-radius-sm);
+  box-shadow: 0 4px 12px var(--shadow-dark);
+}
+
+/* Game Control Console */
+/* Game Console */
+.game-console {
+  position: absolute;
+  bottom: 20px;
+  left: 80px;
+  right: 20px;
+  z-index: 1000;
+  background-color: var(--bg-white-95);
+  padding: 16px 20px;
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 4px 12px var(--shadow-medium);
+  backdrop-filter: blur(5px);
+  border: 1px solid var(--bg-white-border);
+  min-height: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.game-console-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.game-console-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.game-console-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.team-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.team-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.vs-text {
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 0 4px;
+}
+
+.selecting-opponent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.loading-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #e0e0e0;
+  border-top: 2px solid #4ECDC4;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* Game Actions */
+.game-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 16px;
+}
+
+/* Winner Selection Buttons */
+.winner-select-button {
+  padding: 6px 12px;
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: var(--transition-fast);
+}
+
+.winner-select-button.primary {
+  background-color: var(--primary-teal);
+  box-shadow: 0 1px 3px var(--shadow-teal-light);
+}
+
+.winner-select-button.primary:hover {
+  background-color: var(--primary-teal-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px var(--shadow-teal-medium);
+}
+
+/* Team-colored buttons will have background-color set dynamically via style attribute */
+
+.winner-select-button.team-colored:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.winner-select-button.cancel {
+  background-color: var(--danger-red);
+  box-shadow: 0 1px 3px var(--shadow-danger-light);
+}
+
+.winner-select-button.cancel:hover {
+  background-color: var(--danger-red-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px var(--shadow-danger-medium);
+}
+
+.winner-select-button.disabled {
+  background-color: var(--disabled-gray) !important;
+  cursor: not-allowed !important;
+  opacity: 0.6;
+  box-shadow: 0 1px 3px var(--shadow-disabled) !important;
+}
+
+.winner-select-button.disabled:hover {
+  transform: none !important;
+}
+
+.winner-select-button.reselect {
+  background-color: var(--secondary-gray);
+  box-shadow: 0 1px 3px var(--shadow-gray-light);
+}
+
+.winner-select-button.reselect:hover {
+  background-color: var(--secondary-gray-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px var(--shadow-gray-medium);
+}
+
+/* Info Panel */
+.info-panel {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  min-width: 200px;
+  text-align: left;
+}
+
+.selected-country-info {
+  margin: 10px 0;
+  padding: 12px;
+  background-color: var(--bg-white-95);
+  border-radius: var(--border-radius-lg);
+  box-shadow: 0 4px 12px var(--shadow-dark);
+  border: 2px solid var(--primary-red);
+  max-width: 250px;
+}
+
+.selected-country-title {
+  color: var(--primary-red);
+  margin: 0 0 8px 0;
+  font-size: 16px;
+}
+
+.country-id-text {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.clubs-section {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bg-divider);
+}
+
+.clubs-title {
+  margin: 0 0 6px 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.clubs-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.club-list-item {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 2px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.club-item-info {
+  display: flex;
+  align-items: center;
+}
+
+.club-color-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  border: 1px solid var(--shadow-border);
+}
+
+.club-name {
+  font-weight: 500;
+}
+
+.club-points {
+  font-size: 11px;
+  color: var(--primary-teal);
+  font-weight: 600;
+}
+
+.no-clubs-section {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--bg-divider);
+}
+
+.no-clubs-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-light);
+  font-style: italic;
+}
+
+.svg-container {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  cursor: default;
+}
+
+/* SVG Map Container */
+.svg-map-container {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.svg-map-container:active {
+  cursor: grabbing;
+}
+
+.svg-map-content {
+  width: 100%;
+  height: 100%;
+  transition: transform 0.1s ease-out;
+}
+
+/* SVG Path Styles (for dynamic coloring) */
+.svg-country-path {
+  stroke: var(--svg-stroke);
+  stroke-width: 0.5;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.svg-country-path:hover {
+  stroke-width: 1;
+  filter: brightness(1.1);
+}
+
+.svg-country-path.selected {
+  fill: var(--primary-red) !important;
+  stroke-width: 2;
+}
