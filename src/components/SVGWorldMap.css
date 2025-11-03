@@ -202,6 +202,26 @@
   transform: translateY(-1px);
 }
 
+/* Initialize Game Button */
+.initialize-button {
+  padding: 8px 12px;
+  background-color: var(--primary-teal);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: var(--transition-fast);
+  box-shadow: 0 1px 3px var(--shadow-teal-light);
+}
+
+.initialize-button:hover {
+  background-color: var(--primary-teal-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px var(--shadow-teal-medium);
+}
+
 /* Debug Reset Button */
 .debug-reset-button {
   padding: 8px 12px;

@@ -4,6 +4,7 @@ import WorldMap from './components/WorldMap';
 import SVGWorldMap from './components/SVGWorldMap';
 import AddClubForm from './components/AddClubForm';
 import ClubsTable from './components/ClubsTable';
+import { teamColors } from './colors';
 
 interface CountryClickInfo {
   name: string;
@@ -45,15 +46,9 @@ function App() {
     }
   }, [clubs]);
 
-  // Generate a random color for a new club
+  // Generate a random color for a new club using colors from colors.ts
   const generateRandomColor = (): string => {
-    const colors = [
-      '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-      '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-      '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D7BDE2',
-      '#A3E4D7', '#F9E79F', '#FADBD8', '#D5DBDB', '#AED6F1'
-    ];
-    return colors[Math.floor(Math.random() * colors.length)];
+    return teamColors[Math.floor(Math.random() * teamColors.length)];
   };
 
   const handleCountryClick = (country: CountryClickInfo) => {
@@ -130,12 +125,16 @@ function App() {
     );
   };
 
+  const handleSetAllClubs = (newClubs: Club[]) => {
+    setClubs(newClubs);
+  };
+
   return (
     <div className="App">
       <main style={{ display: 'flex', width: '100vw', height: '100vh' }}>
         {/* Map area - 3/4 of screen width */}
         <div style={{ width: '75%', height: '100vh' }}>
-          <SVGWorldMap onCountryClick={handleCountryClick} clubs={clubs} onUpdateClub={handleUpdateClub} />
+          <SVGWorldMap onCountryClick={handleCountryClick} clubs={clubs} onUpdateClub={handleUpdateClub} onSetAllClubs={handleSetAllClubs} />
         </div>
         
         {/* Sidebar - 1/4 of screen width */}

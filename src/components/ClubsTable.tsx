@@ -42,6 +42,9 @@ const ClubsTable: React.FC<ClubsTableProps> = ({ clubs, onEditClub, onDeleteClub
         <table className="clubs-table">
           <thead className="clubs-table-head">
             <tr>
+              <th className="clubs-table-header-cell center" style={{ width: '50px' }}>
+                Poz.
+              </th>
               <th className="clubs-table-header-cell">
                 Nazwa klubu
               </th>
@@ -51,7 +54,9 @@ const ClubsTable: React.FC<ClubsTableProps> = ({ clubs, onEditClub, onDeleteClub
             </tr>
           </thead>
           <tbody>
-            {clubs.map((club, index) => (
+            {clubs
+              .sort((a, b) => b.points - a.points) // Sort by points descending
+              .map((club, index) => (
               <tr 
                 key={club.id}
                 style={{ 
@@ -72,9 +77,19 @@ const ClubsTable: React.FC<ClubsTableProps> = ({ clubs, onEditClub, onDeleteClub
                 }}
               >
                 <td style={{ 
+                  padding: '12px 8px',
+                  textAlign: 'center',
+                  fontWeight: '600',
+                  color: '#666',
+                  width: '50px'
+                }}>
+                  {index + 1}
+                </td>
+                <td style={{ 
                   padding: '12px 16px',
                   color: '#333',
-                  position: 'relative'
+                  position: 'relative',
+                  textAlign: 'left'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center' }}>
                     <div 
@@ -87,7 +102,7 @@ const ClubsTable: React.FC<ClubsTableProps> = ({ clubs, onEditClub, onDeleteClub
                         border: '1px solid rgba(0,0,0,0.1)'
                       }}
                     ></div>
-                    <div>
+                    <div style={{ textAlign: 'left' }}>
                       <div style={{ fontWeight: '500' }}>
                         {club.name}
                         {club.isEliminated && (
@@ -104,7 +119,8 @@ const ClubsTable: React.FC<ClubsTableProps> = ({ clubs, onEditClub, onDeleteClub
                       <div style={{ 
                         fontSize: '12px', 
                         color: club.isEliminated ? '#999' : '#666', 
-                        marginTop: '2px' 
+                        marginTop: '2px',
+                        textAlign: 'left'
                       }}>
                         {club.territories.length === 1 
                           ? club.territories[0] 

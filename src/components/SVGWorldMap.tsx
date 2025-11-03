@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import "./SVGWorldMap.css";
+import { teams } from "../teams";
+import { teamColors } from "../colors";
 
 interface CountryClickInfo {
   name: string;
@@ -28,12 +30,14 @@ interface SVGWorldMapProps {
   onCountryClick?: (country: CountryClickInfo) => void;
   clubs: Club[];
   onUpdateClub?: (clubId: string, updates: Partial<Club>) => void;
+  onSetAllClubs?: (clubs: Club[]) => void;
 }
 
 const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
   onCountryClick,
   clubs,
   onUpdateClub,
+  onSetAllClubs,
 }) => {
   const [selectedCountry, setSelectedCountry] =
     useState<CountryClickInfo | null>(null);
@@ -359,6 +363,53 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         window.location.reload();
       } catch (error) {
         console.error("Error clearing game state:", error);
+      }
+    }
+  };
+
+  // Function to initialize game with teams from teams.ts
+  const handleInitializeGame = () => {
+    const confirmed = window.confirm(
+      "Czy na pewno chcesz zainicjalizować grę z drużynami z pliku teams.ts? Spowoduje to wymazanie obecnych danych i restart gry."
+    );
+
+    if (confirmed && onSetAllClubs) {
+      try {
+        // Clear existing game state
+        localStorage.removeItem("imperializm-clubs");
+        localStorage.removeItem("imperializm-currentRound");
+        localStorage.removeItem("imperializm-gameStarted");
+        localStorage.removeItem("imperializm-selectedTeam");
+        localStorage.removeItem("imperializm-opponentTeam");
+        localStorage.removeItem("imperializm-gameHistory");
+
+        // Create clubs from teams array using colors from colors.ts
+        const initializedClubs: Club[] = teams.map((team, index) => ({
+          id: `team-${index + 1}`,
+          name: team.team,
+          country: team.country,
+          points: 0,
+          color: teamColors[index % teamColors.length],
+          territories: [team.country], // Start with their home country
+          isEliminated: false
+        }));
+
+        // Set all clubs at once through the parent component
+        onSetAllClubs(initializedClubs);
+
+        // Reset local state
+        setCurrentRound(0);
+        setGameStarted(false);
+        setSelectedTeam(null);
+        setOpponentTeam(null);
+        setGameHistory([]);
+        setIsSelectingWinner(false);
+        setIsTransitioningRound(false);
+
+        alert(`Gra została zainicjalizowana z ${teams.length} drużynami!`);
+      } catch (error) {
+        console.error("Error initializing game:", error);
+        alert("Wystąpił błąd podczas inicjalizacji gry.");
       }
     }
   };
@@ -700,6 +751,15 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
           }`}
         >
           {gameStarted ? "Zakończ" : "Rozpocznij"}
+        </button>
+
+        {/* Initialize Game Button */}
+        <button
+          onClick={handleInitializeGame}
+          className="initialize-button"
+          title="Zainicjalizuj grę z drużynami z pliku teams.ts"
+        >
+          🎯 Inicjalizuj
         </button>
 
         {/* Debug Button */}
