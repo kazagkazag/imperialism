@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import "./SVGWorldMap.css";
 import { teams } from "../teams";
 import { teamColors } from "../colors";
+import { findCountriesInDirection, getCountryCenter } from "../countryCoordinates";
 
 interface CountryClickInfo {
   name: string;
@@ -155,6 +156,66 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     }
   }, [gameHistory]);
 
+  // Helper function to pick a random direction
+  const getRandomDirection = (): string => {
+    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return directions[Math.floor(Math.random() * directions.length)];
+  };
+
+  // Helper function to select opponent using directional logic
+  const selectOpponentByDirection = useCallback((currentTeam: Club, availableOpponents: Club[]): Club => {
+    // Pick a random direction
+    const selectedDirection = getRandomDirection();
+    console.log(`🧭 Direction selected: ${selectedDirection}`);
+
+    // Get all territories of the current team
+    const currentTerritories = currentTeam.territories;
+    console.log(`📍 Current team territories:`, currentTerritories);
+
+    // Get all enemy territories
+    const enemyTerritories = availableOpponents.flatMap(opponent => 
+      opponent.territories.map(territory => ({ territory, team: opponent }))
+    );
+    console.log(`🎯 Enemy territories:`, enemyTerritories.map(et => `${et.territory} (${et.team.name})`));
+
+    // Try to find opponents in the selected direction from any of our territories
+    let directionalTargets: Array<{ country: string; distance: number; direction: string; team: Club }> = [];
+    
+    for (const ourTerritory of currentTerritories) {
+      const targetsFromThisTerritory = findCountriesInDirection(
+        ourTerritory,
+        selectedDirection,
+        Infinity,
+        currentTerritories // exclude our own territories
+      );
+      
+      // Filter to only include enemy territories and add team info
+      const enemyTargetsFromThisTerritory = targetsFromThisTerritory
+        .map(target => {
+          const enemyInfo = enemyTerritories.find(et => et.territory === target.country);
+          return enemyInfo ? { ...target, team: enemyInfo.team } : null;
+        })
+        .filter((target): target is { country: string; distance: number; direction: string; team: Club } => target !== null);
+      
+      directionalTargets.push(...enemyTargetsFromThisTerritory);
+    }
+
+    console.log(`🎯 Targets found in direction ${selectedDirection}:`, 
+      directionalTargets.map(t => `${t.country} (${t.team.name}) - distance: ${t.distance.toFixed(1)}`));
+
+    if (directionalTargets.length > 0) {
+      // Sort by distance and pick the closest
+      directionalTargets.sort((a, b) => a.distance - b.distance);
+      const closestTarget = directionalTargets[0];
+      console.log(`🎯 Closest target: ${closestTarget.country} (${closestTarget.team.name})`);
+      return closestTarget.team;
+    } else {
+      console.log(`❌ No enemies found in direction ${selectedDirection}, falling back to random selection`);
+      // Fallback to random selection if no directional targets found
+      return availableOpponents[Math.floor(Math.random() * availableOpponents.length)];
+    }
+  }, []);
+
   // Handle opponent reselection
   const handleOpponentReselection = () => {
     if (!selectedTeam) return;
@@ -168,9 +229,10 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       const remainingTeams = clubs.filter(
         (club) => club.id !== selectedTeam.id && !club.isEliminated
       );
-      const randomOpponent =
-        remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
-      setOpponentTeam(randomOpponent);
+      
+      // Use directional opponent selection instead of random
+      const selectedOpponent = selectOpponentByDirection(selectedTeam, remainingTeams);
+      setOpponentTeam(selectedOpponent);
       setIsSelectingOpponent(false);
     }, 500);
   };
@@ -325,14 +387,13 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
           const remainingTeams = activeTeams.filter(
             (club) => club.id !== randomTeam.id
           );
-          const randomOpponent =
-            remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
-          console.log(
-            "Possible opponents:",
-            remainingTeams.map((c) => c.name)
-          );
-          console.log("Selected opponent:", randomOpponent?.name);
-          setOpponentTeam(randomOpponent);
+          
+          console.log("Possible opponents:", remainingTeams.map((c) => c.name));
+          
+          // Use directional opponent selection instead of random
+          const selectedOpponent = selectOpponentByDirection(randomTeam, remainingTeams);
+          console.log("Selected opponent:", selectedOpponent?.name);
+          setOpponentTeam(selectedOpponent);
           setIsSelectingOpponent(false);
         }, 500);
       } else {
@@ -341,7 +402,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         setGameStarted(false);
       }
     }
-  }, [clubs, gameStarted, selectedTeam, opponentTeam, isTransitioningRound]);
+  }, [clubs, gameStarted, selectedTeam, opponentTeam, isTransitioningRound, selectOpponentByDirection]);
 
   // Debug function to clear localStorage
   const handleClearGameState = () => {
