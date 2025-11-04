@@ -2,7 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import "./SVGWorldMap.css";
 import { teams } from "../teams";
 import { teamColors } from "../colors";
-import { findCountriesInDirection, getCountryCenter } from "../countryCoordinates";
+import {
+  findCountriesInDirection,
+  getCountryCenter,
+} from "../countryCoordinates";
+import { splitSvgPathAuto } from "../splitTerritory";
 
 interface CountryClickInfo {
   name: string;
@@ -44,6 +48,31 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     useState<CountryClickInfo | null>(null);
   // Remove hoveredCountry state to prevent re-renders on hover
   const [svgContent, setSvgContent] = useState<string>("");
+  
+  // State to store original SVG structure and current territories
+  const [originalSvgStructure, setOriginalSvgStructure] = useState<{
+    header: string; // Everything before paths
+    footer: string; // Everything after paths
+  }>({ header: "", footer: "" });
+  
+  const [originalPaths, setOriginalPaths] = useState<{
+    [countryName: string]: string; // Original path d attribute
+  }>({});
+  
+  const [currentTerritories, setCurrentTerritories] = useState<{
+    [territoryName: string]: {
+      pathD: string;
+      originalCountry: string; // Which original country this came from
+    };
+  }>({});
+
+  // State to track split territories (keeping for backward compatibility)
+  const [splitTerritories, setSplitTerritories] = useState<{
+    [originalCountry: string]: {
+      partA: { name: string; pathD: string };
+      partB: { name: string; pathD: string };
+    };
+  }>({});
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   // Load game state from localStorage or initialize with defaults
@@ -158,63 +187,96 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
 
   // Helper function to pick a random direction
   const getRandomDirection = (): string => {
-    const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
     return directions[Math.floor(Math.random() * directions.length)];
   };
 
   // Helper function to select opponent using directional logic
-  const selectOpponentByDirection = useCallback((currentTeam: Club, availableOpponents: Club[]): Club => {
-    // Pick a random direction
-    const selectedDirection = getRandomDirection();
-    console.log(`🧭 Direction selected: ${selectedDirection}`);
+  const selectOpponentByDirection = useCallback(
+    (currentTeam: Club, availableOpponents: Club[]): Club => {
+      // Pick a random direction
+      const selectedDirection = getRandomDirection();
+      console.log(`🧭 Direction selected: ${selectedDirection}`);
 
-    // Get all territories of the current team
-    const currentTerritories = currentTeam.territories;
-    console.log(`📍 Current team territories:`, currentTerritories);
+      // Get all territories of the current team
+      const currentTerritories = currentTeam.territories;
+      console.log(`📍 Current team territories:`, currentTerritories);
 
-    // Get all enemy territories
-    const enemyTerritories = availableOpponents.flatMap(opponent => 
-      opponent.territories.map(territory => ({ territory, team: opponent }))
-    );
-    console.log(`🎯 Enemy territories:`, enemyTerritories.map(et => `${et.territory} (${et.team.name})`));
-
-    // Try to find opponents in the selected direction from any of our territories
-    let directionalTargets: Array<{ country: string; distance: number; direction: string; team: Club }> = [];
-    
-    for (const ourTerritory of currentTerritories) {
-      const targetsFromThisTerritory = findCountriesInDirection(
-        ourTerritory,
-        selectedDirection,
-        Infinity,
-        currentTerritories // exclude our own territories
+      // Get all enemy territories
+      const enemyTerritories = availableOpponents.flatMap((opponent) =>
+        opponent.territories.map((territory) => ({ territory, team: opponent }))
       );
-      
-      // Filter to only include enemy territories and add team info
-      const enemyTargetsFromThisTerritory = targetsFromThisTerritory
-        .map(target => {
-          const enemyInfo = enemyTerritories.find(et => et.territory === target.country);
-          return enemyInfo ? { ...target, team: enemyInfo.team } : null;
-        })
-        .filter((target): target is { country: string; distance: number; direction: string; team: Club } => target !== null);
-      
-      directionalTargets.push(...enemyTargetsFromThisTerritory);
-    }
+      console.log(
+        `🎯 Enemy territories:`,
+        enemyTerritories.map((et) => `${et.territory} (${et.team.name})`)
+      );
 
-    console.log(`🎯 Targets found in direction ${selectedDirection}:`, 
-      directionalTargets.map(t => `${t.country} (${t.team.name}) - distance: ${t.distance.toFixed(1)}`));
+      // Try to find opponents in the selected direction from any of our territories
+      let directionalTargets: Array<{
+        country: string;
+        distance: number;
+        direction: string;
+        team: Club;
+      }> = [];
 
-    if (directionalTargets.length > 0) {
-      // Sort by distance and pick the closest
-      directionalTargets.sort((a, b) => a.distance - b.distance);
-      const closestTarget = directionalTargets[0];
-      console.log(`🎯 Closest target: ${closestTarget.country} (${closestTarget.team.name})`);
-      return closestTarget.team;
-    } else {
-      console.log(`❌ No enemies found in direction ${selectedDirection}, falling back to random selection`);
-      // Fallback to random selection if no directional targets found
-      return availableOpponents[Math.floor(Math.random() * availableOpponents.length)];
-    }
-  }, []);
+      for (const ourTerritory of currentTerritories) {
+        const targetsFromThisTerritory = findCountriesInDirection(
+          ourTerritory,
+          selectedDirection,
+          Infinity,
+          currentTerritories // exclude our own territories
+        );
+
+        // Filter to only include enemy territories and add team info
+        const enemyTargetsFromThisTerritory = targetsFromThisTerritory
+          .map((target) => {
+            const enemyInfo = enemyTerritories.find(
+              (et) => et.territory === target.country
+            );
+            return enemyInfo ? { ...target, team: enemyInfo.team } : null;
+          })
+          .filter(
+            (
+              target
+            ): target is {
+              country: string;
+              distance: number;
+              direction: string;
+              team: Club;
+            } => target !== null
+          );
+
+        directionalTargets.push(...enemyTargetsFromThisTerritory);
+      }
+
+      console.log(
+        `🎯 Targets found in direction ${selectedDirection}:`,
+        directionalTargets.map(
+          (t) =>
+            `${t.country} (${t.team.name}) - distance: ${t.distance.toFixed(1)}`
+        )
+      );
+
+      if (directionalTargets.length > 0) {
+        // Sort by distance and pick the closest
+        directionalTargets.sort((a, b) => a.distance - b.distance);
+        const closestTarget = directionalTargets[0];
+        console.log(
+          `🎯 Closest target: ${closestTarget.country} (${closestTarget.team.name})`
+        );
+        return closestTarget.team;
+      } else {
+        console.log(
+          `❌ No enemies found in direction ${selectedDirection}, falling back to random selection`
+        );
+        // Fallback to random selection if no directional targets found
+        return availableOpponents[
+          Math.floor(Math.random() * availableOpponents.length)
+        ];
+      }
+    },
+    []
+  );
 
   // Handle opponent reselection
   const handleOpponentReselection = () => {
@@ -229,9 +291,12 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       const remainingTeams = clubs.filter(
         (club) => club.id !== selectedTeam.id && !club.isEliminated
       );
-      
+
       // Use directional opponent selection instead of random
-      const selectedOpponent = selectOpponentByDirection(selectedTeam, remainingTeams);
+      const selectedOpponent = selectOpponentByDirection(
+        selectedTeam,
+        remainingTeams
+      );
       setOpponentTeam(selectedOpponent);
       setIsSelectingOpponent(false);
     }, 500);
@@ -387,11 +452,17 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
           const remainingTeams = activeTeams.filter(
             (club) => club.id !== randomTeam.id
           );
-          
-          console.log("Possible opponents:", remainingTeams.map((c) => c.name));
-          
+
+          console.log(
+            "Possible opponents:",
+            remainingTeams.map((c) => c.name)
+          );
+
           // Use directional opponent selection instead of random
-          const selectedOpponent = selectOpponentByDirection(randomTeam, remainingTeams);
+          const selectedOpponent = selectOpponentByDirection(
+            randomTeam,
+            remainingTeams
+          );
           console.log("Selected opponent:", selectedOpponent?.name);
           setOpponentTeam(selectedOpponent);
           setIsSelectingOpponent(false);
@@ -402,7 +473,14 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         setGameStarted(false);
       }
     }
-  }, [clubs, gameStarted, selectedTeam, opponentTeam, isTransitioningRound, selectOpponentByDirection]);
+  }, [
+    clubs,
+    gameStarted,
+    selectedTeam,
+    opponentTeam,
+    isTransitioningRound,
+    selectOpponentByDirection,
+  ]);
 
   // Debug function to clear localStorage
   const handleClearGameState = () => {
@@ -452,7 +530,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
           points: 0,
           color: teamColors[index % teamColors.length],
           territories: [team.country], // Start with their home country
-          isEliminated: false
+          isEliminated: false,
         }));
 
         // Set all clubs at once through the parent component
@@ -555,22 +633,158 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     [onCountryClick]
   );
 
+  // Handle territory splitting (new state-driven approach)
+  const handleSplitTerritory = useCallback(
+    (territoryName: string) => {
+      // Check if territory has clubs (can't split if it has clubs)
+      const territoryClubs = countriesWithClubs[territoryName];
+      if (territoryClubs && territoryClubs.length > 0) {
+        alert("Cannot split territory with clubs. Remove clubs first.");
+        return;
+      }
+
+      // Find the territory in our current territories state
+      const territoryData = currentTerritories[territoryName];
+      if (!territoryData) {
+        console.error("Territory not found in current territories:", territoryName);
+        console.error("Available territories:", Object.keys(currentTerritories));
+        alert(`Territory "${territoryName}" not found.`);
+        return;
+      }
+
+      console.log(`🔪 Splitting territory: ${territoryName}`);
+      console.log(`📐 Using path data from current territories state`);
+
+      try {
+        const { partA, partB, angleUsed } = splitSvgPathAuto(territoryData.pathD);
+
+        // Generate new territory names
+        const partAName = `${territoryName} 1`;
+        const partBName = `${territoryName} 2`;
+
+        // Update current territories: remove original, add split parts
+        setCurrentTerritories((prev) => {
+          const newTerritories = { ...prev };
+          
+          // Remove the original territory that was split
+          delete newTerritories[territoryName];
+          
+          // Add the two new split territories
+          newTerritories[partAName] = {
+            pathD: partA,
+            originalCountry: territoryData.originalCountry
+          };
+          newTerritories[partBName] = {
+            pathD: partB,
+            originalCountry: territoryData.originalCountry
+          };
+          
+          console.log(`✅ Split complete: ${territoryName} → ${partAName} + ${partBName}`);
+          console.log(`🗺️ Total territories: ${Object.keys(newTerritories).length}`);
+          
+          return newTerritories;
+        });
+
+        // Also update the old splitTerritories state for backward compatibility
+        setSplitTerritories((prev) => ({
+          ...prev,
+          [territoryName]: {
+            partA: { name: partAName, pathD: partA },
+            partB: { name: partBName, pathD: partB },
+          },
+        }));
+
+        console.log(`🎯 Split angle used: ${angleUsed}°`);
+
+        // Clear selection since the original territory no longer exists
+        setSelectedCountry(null);
+      } catch (error) {
+        console.error("❌ Error splitting territory:", error);
+        alert("Failed to split territory. The shape may be too complex or invalid.");
+      }
+    },
+    [currentTerritories, countriesWithClubs]
+  );
+
   // Empty mouse handlers to prevent re-renders - hover effects handled by CSS
   const handleCountryMouseEnter = useCallback((countryName: string) => {
     // No state updates to prevent re-renders
-    console.log("Hovering over:", countryName);
+    // console.log("Hovering over:", countryName);
   }, []);
 
   const handleCountryMouseLeave = useCallback(() => {
     // No state updates to prevent re-renders
-    console.log("Mouse left country");
+    // console.log("Mouse left country");
   }, []);
 
-  // Load SVG content
+  // Load SVG content and extract original paths
   useEffect(() => {
     fetch("/map.svg")
       .then((response) => response.text())
-      .then((data) => setSvgContent(data))
+      .then((data) => {
+        console.log("📥 Loading original SVG and extracting territories");
+        setSvgContent(data);
+        
+        // Parse the SVG to extract original paths and structure
+        const parser = new DOMParser();
+        const svgDoc = parser.parseFromString(data, "image/svg+xml");
+        const paths = svgDoc.querySelectorAll("path");
+        
+        const newOriginalPaths: { [countryName: string]: string } = {};
+        const newCurrentTerritories: { [territoryName: string]: { pathD: string; originalCountry: string } } = {};
+        
+        paths.forEach((path) => {
+          // Extract country name from various attributes
+          const dataNameAttr = path.getAttribute("data-name");
+          const titleAttr = path.getAttribute("title");
+          const idAttr = path.getAttribute("id");
+          const classAttr = path.getAttribute("class");
+          
+          let countryName = "";
+          if (dataNameAttr) countryName = dataNameAttr;
+          else if (titleAttr) countryName = titleAttr;
+          else if (idAttr) {
+            countryName = idAttr
+              .replace(/-/g, " ")
+              .replace(/\b\w/g, (l: string) => l.toUpperCase());
+          } else if (classAttr) {
+            countryName = classAttr
+              .replace(/-/g, " ")
+              .replace(/\b\w/g, (l: string) => l.toUpperCase());
+          }
+          
+          const pathD = path.getAttribute("d");
+          if (countryName && pathD) {
+            newOriginalPaths[countryName] = pathD;
+            newCurrentTerritories[countryName] = {
+              pathD: pathD,
+              originalCountry: countryName
+            };
+          }
+        });
+        
+        setOriginalPaths(newOriginalPaths);
+        setCurrentTerritories(newCurrentTerritories);
+        
+        // Extract SVG structure (everything except paths)
+        const svgElement = svgDoc.querySelector("svg");
+        if (svgElement) {
+          // Remove all paths to get the structure
+          const clonedSvg = svgElement.cloneNode(true) as SVGElement;
+          clonedSvg.querySelectorAll("path").forEach(path => path.remove());
+          
+          const svgString = new XMLSerializer().serializeToString(clonedSvg);
+          const headerMatch = svgString.match(/^([\s\S]*?)(<\/svg>)$/);
+          if (headerMatch) {
+            setOriginalSvgStructure({
+              header: headerMatch[1],
+              footer: headerMatch[2]
+            });
+          }
+        }
+        
+        console.log(`🗺️ Extracted ${Object.keys(newOriginalPaths).length} original territories`);
+      })
       .catch((error) => console.error("Error loading SVG:", error));
   }, []);
 
@@ -732,72 +946,91 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     setZoom(Math.max(0.5, zoom * 0.8));
   };
 
-  // Process SVG content to make countries interactive
-  const getProcessedSvgContent = useCallback(() => {
-    return svgContent.replace(/<path[^>]*>/g, (match) => {
-      // Try to extract country name from various attributes
-      const idMatch = match.match(/id="([^"]*)"/);
-      const classMatch = match.match(/class="([^"]*)"/);
-      const titleMatch = match.match(/title="([^"]*)"/);
-      const dataNameMatch = match.match(/data-name="([^"]*)"/);
-
-      let countryName = "";
-      if (dataNameMatch) countryName = dataNameMatch[1];
-      else if (titleMatch) countryName = titleMatch[1];
-      else if (idMatch)
-        countryName = idMatch[1]
-          .replace(/-/g, " ")
-          .replace(/\b\w/g, (l: string) => l.toUpperCase());
-      else if (classMatch)
-        countryName = classMatch[1]
-          .replace(/-/g, " ")
-          .replace(/\b\w/g, (l: string) => l.toUpperCase());
-
-      if (!countryName) return match;
-
-      // Determine fill color and opacity based on state
+  // Helper function to create a styled path element
+  const createStyledPath = useCallback(
+    (territoryName: string, pathD: string, originalPath?: string) => {
+      // Determine fill color and opacity for territory
       let fill = "#D6D6DA"; // Default gray
       let opacity = "1"; // Default full opacity
 
-      // Check if this country has a club and use its color
-      const countryClub = countriesWithClubs[countryName];
-      if (countryClub && countryClub.length > 0) {
-        fill = countryClub[0].color; // Use the club's color
+      // Check if this territory has a club and use its color
+      const territoryClub = countriesWithClubs[territoryName];
+      if (territoryClub && territoryClub.length > 0) {
+        fill = territoryClub[0].color; // Use the club's color
       }
 
       // Override with selection color if selected
-      if (selectedCountry && countryName === selectedCountry.name) {
+      if (selectedCountry && territoryName === selectedCountry.name) {
         fill = "#FF6B6B"; // Red for selected country
       }
 
       // Apply dimming when there's an active match
       if (selectedTeam && opponentTeam) {
-        const isSelectedTeamTerritory = selectedTeam.territories.includes(countryName);
-        const isOpponentTeamTerritory = opponentTeam.territories.includes(countryName);
-        
+        const isSelectedTeamTerritory =
+          selectedTeam.territories.includes(territoryName);
+        const isOpponentTeamTerritory =
+          opponentTeam.territories.includes(territoryName);
+
         // Only highlight territories involved in the current match
         if (!isSelectedTeamTerritory && !isOpponentTeamTerritory) {
           opacity = "0.3"; // Dim countries not involved in the match
         }
       }
 
-      // Hover effects will be handled by CSS instead of state
+      if (originalPath) {
+        // Modify existing path
+        let cleanedMatch = originalPath
+          .replace(/\sfill="[^"]*"/g, "")
+          .replace(/\sopacity="[^"]*"/g, "");
+        cleanedMatch = cleanedMatch.replace(/\sd="[^"]*"/g, ` d="${pathD}"`);
 
-      // Remove any existing fill and opacity attributes and add interactive properties
-      let cleanedMatch = match.replace(/\sfill="[^"]*"/g, "").replace(/\sopacity="[^"]*"/g, "");
-
-      const interactiveProps = `
+        const interactiveProps = `
           fill="${fill}"
           opacity="${opacity}"
           stroke="#FFFFFF"
           stroke-width="0.5"
           cursor="pointer"
-          data-country="${countryName}"
+          data-country="${territoryName}"
         `;
 
-      return cleanedMatch.replace(">", ` ${interactiveProps}>`);
-    });
-  }, [svgContent, countriesWithClubs, selectedCountry, selectedTeam, opponentTeam]);
+        return cleanedMatch.replace(">", ` ${interactiveProps}>`);
+      } else {
+        // Create new path
+        return `<path
+        d="${pathD}"
+        fill="${fill}"
+        opacity="${opacity}"
+        stroke="#FFFFFF"
+        stroke-width="0.5"
+        cursor="pointer"
+        data-country="${territoryName}"
+      />`;
+      }
+    },
+    [countriesWithClubs, selectedCountry, selectedTeam, opponentTeam]
+  );
+
+  // Build SVG content from current territories state (state-driven approach)
+  const getProcessedSvgContent = useCallback(() => {
+    // If we don't have the original structure yet, fall back to the old approach
+    if (!originalSvgStructure.header || Object.keys(currentTerritories).length === 0) {
+      console.log("🔄 Original structure not ready, using fallback");
+      return svgContent;
+    }
+
+    console.log(`🏗️ Building SVG from ${Object.keys(currentTerritories).length} current territories`);
+    
+    // Build all path elements from current territories
+    const pathElements = Object.entries(currentTerritories).map(([territoryName, territoryData]) => {
+      return createStyledPath(territoryName, territoryData.pathD);
+    }).join('\n');
+    
+    // Combine header, paths, and footer
+    const result = originalSvgStructure.header + pathElements + originalSvgStructure.footer;
+    
+    console.log(`🎯 Generated SVG with ${Object.keys(currentTerritories).length} territories`);
+    return result;
+  }, [originalSvgStructure, currentTerritories, createStyledPath, svgContent]);
 
   if (!svgContent) {
     return (
@@ -1082,6 +1315,28 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
               countriesWithClubs[selectedCountry.name].length === 0) && (
               <div className="no-clubs-section">
                 <p className="no-clubs-text">Brak klubów w tym kraju</p>
+                <button
+                  className="split-territory-button"
+                  onClick={() => handleSplitTerritory(selectedCountry.name)}
+                  style={{
+                    marginTop: "8px",
+                    padding: "6px 12px",
+                    backgroundColor: "#FF6B6B",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                  }}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.backgroundColor = "#FF5252")
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.backgroundColor = "#FF6B6B")
+                  }
+                >
+                  Split Territory
+                </button>
               </div>
             )}
           </div>
