@@ -127,13 +127,12 @@
 /* Main Menu Bar */
 .main-menu-bar {
   position: absolute;
-  top: 20px;
-  left: 20px;
-  right: 20px;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 1000;
   background-color: var(--bg-white-95);
   padding: 12px 20px;
-  border-radius: var(--border-radius-lg);
   box-shadow: 0 4px 12px var(--shadow-medium);
   backdrop-filter: blur(5px);
   border: 1px solid var(--bg-white-border);
@@ -214,6 +213,7 @@
   font-weight: 600;
   transition: var(--transition-fast);
   box-shadow: 0 1px 3px var(--shadow-teal-light);
+  margin: 0 12px 0 auto;
 }
 
 .initialize-button:hover {
