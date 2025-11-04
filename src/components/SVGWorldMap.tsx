@@ -185,6 +185,100 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     }
   }, [gameHistory]);
 
+  // Load SVG content and extract original paths, with localStorage support for split territories
+  useEffect(() => {
+    // Try to load split territories from localStorage first
+    try {
+      const savedTerritories = localStorage.getItem("imperializm-currentTerritories");
+      const savedOriginalPaths = localStorage.getItem("imperializm-originalPaths");
+      const savedSvgStructure = localStorage.getItem("imperializm-originalSvgStructure");
+      if (savedTerritories && savedOriginalPaths && savedSvgStructure) {
+        setCurrentTerritories(JSON.parse(savedTerritories));
+        setOriginalPaths(JSON.parse(savedOriginalPaths));
+        setOriginalSvgStructure(JSON.parse(savedSvgStructure));
+        setSvgContent(""); // We will build SVG from state
+        console.log("✅ Loaded split territories from localStorage");
+        return;
+      }
+    } catch (error) {
+      console.error("Error loading split territories from localStorage:", error);
+    }
+
+    // Fallback: fetch SVG and extract paths as before
+    fetch("/map.svg")
+      .then((response) => response.text())
+      .then((data) => {
+        console.log("📥 Loading original SVG and extracting territories");
+        setSvgContent(data);
+        // Parse the SVG to extract original paths and structure
+        const parser = new DOMParser();
+        const svgDoc = parser.parseFromString(data, "image/svg+xml");
+        const paths = svgDoc.querySelectorAll("path");
+        const newOriginalPaths: { [countryName: string]: string } = {};
+        const newCurrentTerritories: { [territoryName: string]: { pathD: string; originalCountry: string } } = {};
+        paths.forEach((path) => {
+          // Extract country name from various attributes
+          const dataNameAttr = path.getAttribute("data-name");
+          const titleAttr = path.getAttribute("title");
+          const idAttr = path.getAttribute("id");
+          const classAttr = path.getAttribute("class");
+          let countryName = "";
+          if (dataNameAttr) countryName = dataNameAttr;
+          else if (titleAttr) countryName = titleAttr;
+          else if (idAttr) {
+            countryName = idAttr
+              .replace(/-/g, " ")
+              .replace(/\b\w/g, (l) => l.toUpperCase());
+          } else if (classAttr) {
+            countryName = classAttr
+              .replace(/-/g, " ")
+              .replace(/\b\w/g, (l) => l.toUpperCase());
+          }
+          const pathD = path.getAttribute("d");
+          if (countryName && pathD) {
+            newOriginalPaths[countryName] = pathD;
+            newCurrentTerritories[countryName] = {
+              pathD: pathD,
+              originalCountry: countryName
+            };
+          }
+        });
+        setOriginalPaths(newOriginalPaths);
+        setCurrentTerritories(newCurrentTerritories);
+        // Extract SVG structure (everything except paths)
+        const svgElement = svgDoc.querySelector("svg");
+        if (svgElement) {
+          // Remove all paths to get the structure
+          const clonedSvg = svgElement.cloneNode(true) as SVGElement;
+          clonedSvg.querySelectorAll("path").forEach((path: SVGPathElement) => path.remove());
+          const svgString = new XMLSerializer().serializeToString(clonedSvg);
+          const headerMatch = svgString.match(/^([\s\S]*?)(<\/svg>)$/);
+          if (headerMatch) {
+            setOriginalSvgStructure({
+              header: headerMatch[1],
+              footer: headerMatch[2]
+            });
+          }
+        }
+        console.log(`🗺️ Extracted ${Object.keys(newOriginalPaths).length} original territories`);
+      })
+      .catch((error) => console.error("Error loading SVG:", error));
+  }, []);
+
+  // Persist territory map to localStorage whenever it changes (except on initial load)
+  useEffect(() => {
+    if (Object.keys(currentTerritories).length > 0) {
+      try {
+        localStorage.setItem("imperializm-currentTerritories", JSON.stringify(currentTerritories));
+        localStorage.setItem("imperializm-originalPaths", JSON.stringify(originalPaths));
+        localStorage.setItem("imperializm-originalSvgStructure", JSON.stringify(originalSvgStructure));
+        console.log("💾 Saved territory map to localStorage");
+      } catch (error) {
+        console.error("Error saving territory map to localStorage:", error);
+      }
+    }
+  }, [currentTerritories, originalPaths, originalSvgStructure]);
+
   // Helper function to pick a random direction
   const getRandomDirection = (): string => {
     const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
@@ -679,6 +773,16 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
             originalCountry: territoryData.originalCountry
           };
           
+          // Persist to localStorage
+          try {
+            localStorage.setItem("imperializm-currentTerritories", JSON.stringify(newTerritories));
+            localStorage.setItem("imperializm-originalPaths", JSON.stringify(originalPaths));
+            localStorage.setItem("imperializm-originalSvgStructure", JSON.stringify(originalSvgStructure));
+            console.log("💾 Saved split territories to localStorage");
+          } catch (error) {
+            console.error("Error saving split territories to localStorage:", error);
+          }
+          
           console.log(`✅ Split complete: ${territoryName} → ${partAName} + ${partBName}`);
           console.log(`🗺️ Total territories: ${Object.keys(newTerritories).length}`);
           
@@ -703,7 +807,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         alert("Failed to split territory. The shape may be too complex or invalid.");
       }
     },
-    [currentTerritories, countriesWithClubs]
+    [currentTerritories, countriesWithClubs, originalPaths, originalSvgStructure]
   );
 
   // Empty mouse handlers to prevent re-renders - hover effects handled by CSS
@@ -715,77 +819,6 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
   const handleCountryMouseLeave = useCallback(() => {
     // No state updates to prevent re-renders
     // console.log("Mouse left country");
-  }, []);
-
-  // Load SVG content and extract original paths
-  useEffect(() => {
-    fetch("/map.svg")
-      .then((response) => response.text())
-      .then((data) => {
-        console.log("📥 Loading original SVG and extracting territories");
-        setSvgContent(data);
-        
-        // Parse the SVG to extract original paths and structure
-        const parser = new DOMParser();
-        const svgDoc = parser.parseFromString(data, "image/svg+xml");
-        const paths = svgDoc.querySelectorAll("path");
-        
-        const newOriginalPaths: { [countryName: string]: string } = {};
-        const newCurrentTerritories: { [territoryName: string]: { pathD: string; originalCountry: string } } = {};
-        
-        paths.forEach((path) => {
-          // Extract country name from various attributes
-          const dataNameAttr = path.getAttribute("data-name");
-          const titleAttr = path.getAttribute("title");
-          const idAttr = path.getAttribute("id");
-          const classAttr = path.getAttribute("class");
-          
-          let countryName = "";
-          if (dataNameAttr) countryName = dataNameAttr;
-          else if (titleAttr) countryName = titleAttr;
-          else if (idAttr) {
-            countryName = idAttr
-              .replace(/-/g, " ")
-              .replace(/\b\w/g, (l: string) => l.toUpperCase());
-          } else if (classAttr) {
-            countryName = classAttr
-              .replace(/-/g, " ")
-              .replace(/\b\w/g, (l: string) => l.toUpperCase());
-          }
-          
-          const pathD = path.getAttribute("d");
-          if (countryName && pathD) {
-            newOriginalPaths[countryName] = pathD;
-            newCurrentTerritories[countryName] = {
-              pathD: pathD,
-              originalCountry: countryName
-            };
-          }
-        });
-        
-        setOriginalPaths(newOriginalPaths);
-        setCurrentTerritories(newCurrentTerritories);
-        
-        // Extract SVG structure (everything except paths)
-        const svgElement = svgDoc.querySelector("svg");
-        if (svgElement) {
-          // Remove all paths to get the structure
-          const clonedSvg = svgElement.cloneNode(true) as SVGElement;
-          clonedSvg.querySelectorAll("path").forEach(path => path.remove());
-          
-          const svgString = new XMLSerializer().serializeToString(clonedSvg);
-          const headerMatch = svgString.match(/^([\s\S]*?)(<\/svg>)$/);
-          if (headerMatch) {
-            setOriginalSvgStructure({
-              header: headerMatch[1],
-              footer: headerMatch[2]
-            });
-          }
-        }
-        
-        console.log(`🗺️ Extracted ${Object.keys(newOriginalPaths).length} original territories`);
-      })
-      .catch((error) => console.error("Error loading SVG:", error));
   }, []);
 
   // Use refs to store handlers so they don't cause re-renders of the effect
@@ -1032,7 +1065,8 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     return result;
   }, [originalSvgStructure, currentTerritories, createStyledPath, svgContent]);
 
-  if (!svgContent) {
+  // Show loading screen only if we don't have any map data yet
+  if (!svgContent && Object.keys(currentTerritories).length === 0) {
     return (
       <div className="svg-world-map-loading">
         <p>Loading map...</p>
