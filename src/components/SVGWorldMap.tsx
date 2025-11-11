@@ -475,11 +475,58 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         console.log(`🎯 Closest enemy territory: ${closestTarget.territory} (${closestTarget.team.name})`);
         return { territory: closestTarget.territory, team: closestTarget.team };
       } else {
-        console.log(`❌ No enemy territories found in direction ${selectedDirection}, falling back to random selection`);
-        // Fallback to random territory selection if no directional targets found
+        console.log(`❌ No enemy territories found in direction ${selectedDirection}, trying other directions...`);
+        
+        // Try other directions systematically
+        const allDirections = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+        const remainingDirections = allDirections.filter(dir => dir !== selectedDirection);
+        
+        for (const tryDirection of remainingDirections) {
+          console.log(`🔄 Trying direction: ${tryDirection}`);
+          
+          const tryTargets = findCountriesInDirection(
+            selectedTerritory,
+            tryDirection,
+            Infinity,
+            [selectedTerritory]
+          );
+          
+          const tryEnemyTargets = tryTargets
+            .map((target) => {
+              const enemyInfo = enemyTerritories.find(
+                (et) => et.territory === target.country
+              );
+              return enemyInfo ? { ...target, team: enemyInfo.team, territory: target.country } : null;
+            })
+            .filter((target): target is { country: string; distance: number; direction: string; team: Club; territory: string } => target !== null);
+          
+          if (tryEnemyTargets.length > 0) {
+            console.log(`✅ Found ${tryEnemyTargets.length} enemy territories in direction ${tryDirection}`);
+            
+            // Update arrow to show the new direction
+            const newArrowCoords = calculateArrowCoordinates(selectedTerritory, tryDirection);
+            if (newArrowCoords) {
+              setDirectionArrow({
+                ...newArrowCoords,
+                direction: tryDirection
+              });
+            }
+            
+            // Sort by distance and pick the closest
+            tryEnemyTargets.sort((a, b) => a.distance - b.distance);
+            const closestTarget = tryEnemyTargets[0];
+            console.log(`🎯 Closest enemy territory in ${tryDirection}: ${closestTarget.territory} (${closestTarget.team.name})`);
+            return { territory: closestTarget.territory, team: closestTarget.team };
+          }
+        }
+        
+        console.log(`❌ No enemy territories found in any direction, falling back to random selection`);
+        // Final fallback to random territory selection if no directional targets found in any direction
         if (enemyTerritories.length > 0) {
           const randomEnemyTerritory = enemyTerritories[Math.floor(Math.random() * enemyTerritories.length)];
           console.log(`🎲 Random fallback: ${randomEnemyTerritory.territory} (${randomEnemyTerritory.team.name})`);
+          // Clear arrow since we're not using directional logic
+          setDirectionArrow(null);
           return randomEnemyTerritory;
         }
         return null;
