@@ -66,6 +66,15 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     };
   }>({});
 
+  // State for directional arrow
+  const [directionArrow, setDirectionArrow] = useState<{
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+    direction: string;
+  } | null>(null);
+
   // State to track split territories (keeping for backward compatibility)
   const [splitTerritories, setSplitTerritories] = useState<{
     [originalCountry: string]: {
@@ -75,6 +84,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
   }>({});
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const mapContainerRef = useRef<HTMLDivElement>(null);
   // Load game state from localStorage or initialize with defaults
   const [currentRound, setCurrentRound] = useState<number>(() => {
     try {
@@ -126,6 +136,29 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
   const [isSelectingWinner, setIsSelectingWinner] = useState<boolean>(false);
   const [isTransitioningRound, setIsTransitioningRound] =
     useState<boolean>(false);
+  
+  // New state for territory-based battles
+  const [selectedTeamTerritory, setSelectedTeamTerritory] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem("imperializm-selectedTeamTerritory");
+      return saved ? JSON.parse(saved) : null;
+    } catch (error) {
+      return null;
+    }
+  });
+  const [isSelectingTeamTerritory, setIsSelectingTeamTerritory] = useState<boolean>(false);
+  
+  // State for opponent territory selection
+  const [selectedOpponentTerritory, setSelectedOpponentTerritory] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem("imperializm-selectedOpponentTerritory");
+      return saved ? JSON.parse(saved) : null;
+    } catch (error) {
+      return null;
+    }
+  });
+  const [isSelectingOpponentTerritory, setIsSelectingOpponentTerritory] = useState<boolean>(false);
+  
   // Removed drag state - using WASD controls instead
   const svgContainerRef = useRef<HTMLDivElement>(null);
 
@@ -184,6 +217,28 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       console.error("Error saving gameHistory to localStorage:", error);
     }
   }, [gameHistory]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "imperializm-selectedTeamTerritory",
+        JSON.stringify(selectedTeamTerritory)
+      );
+    } catch (error) {
+      console.error("Error saving selectedTeamTerritory to localStorage:", error);
+    }
+  }, [selectedTeamTerritory]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "imperializm-selectedOpponentTerritory",
+        JSON.stringify(selectedOpponentTerritory)
+      );
+    } catch (error) {
+      console.error("Error saving selectedOpponentTerritory to localStorage:", error);
+    }
+  }, [selectedOpponentTerritory]);
 
   // Load SVG content and extract original paths, with localStorage support for split territories
   useEffect(() => {
@@ -285,7 +340,155 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     return directions[Math.floor(Math.random() * directions.length)];
   };
 
-  // Helper function to select opponent using directional logic
+  // Helper function to calculate arrow coordinates from territory center
+  const calculateArrowCoordinates = useCallback((territoryName: string, direction: string): {
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+  } | null => {
+    // Try to find the actual SVG path element for this territory
+    const svgContainer = svgContainerRef.current;
+    if (!svgContainer) {
+      console.log("❌ SVG container not found");
+      return null;
+    }
+
+    // Look for the path element with matching data-country attribute
+    const pathElement = svgContainer.querySelector(`path[data-country="${territoryName}"]`);
+    if (!pathElement) {
+      console.log(`❌ Path element not found for territory: ${territoryName}`);
+      // Fallback to coordinate lookup
+      const center = getCountryCenter(territoryName);
+      if (!center) return null;
+      
+      const arrowLength = 100;
+      const directionAngles: Record<string, number> = {
+        'N': -Math.PI / 2, 'NE': -Math.PI / 4, 'E': 0, 'SE': Math.PI / 4,
+        'S': Math.PI / 2, 'SW': 3 * Math.PI / 4, 'W': Math.PI, 'NW': -3 * Math.PI / 4
+      };
+      const angle = directionAngles[direction];
+      if (angle === undefined) return null;
+      
+      return {
+        fromX: center.x,
+        fromY: center.y,
+        toX: center.x + Math.cos(angle) * arrowLength,
+        toY: center.y + Math.sin(angle) * arrowLength
+      };
+    }
+
+    // Get the actual bounding box of the SVG path
+    const bbox = (pathElement as SVGPathElement).getBBox();
+    const centerX = bbox.x + bbox.width / 2;
+    const centerY = bbox.y + bbox.height / 2;
+    
+    console.log(`🎯 Found actual center for ${territoryName}:`, { centerX, centerY });
+    console.log(`🔍 BBox:`, bbox);
+
+    // Arrow length in SVG coordinates
+    const arrowLength = 100;
+    
+    // Convert direction to angle in radians
+    const directionAngles: Record<string, number> = {
+      'N': -Math.PI / 2,    // -90 degrees
+      'NE': -Math.PI / 4,   // -45 degrees
+      'E': 0,               // 0 degrees
+      'SE': Math.PI / 4,    // 45 degrees
+      'S': Math.PI / 2,     // 90 degrees
+      'SW': 3 * Math.PI / 4, // 135 degrees
+      'W': Math.PI,         // 180 degrees
+      'NW': -3 * Math.PI / 4 // -135 degrees
+    };
+
+    const angle = directionAngles[direction];
+    if (angle === undefined) return null;
+
+    // Calculate end point
+    const toX = centerX + Math.cos(angle) * arrowLength;
+    const toY = centerY + Math.sin(angle) * arrowLength;
+
+    return {
+      fromX: centerX,
+      fromY: centerY,
+      toX,
+      toY
+    };
+  }, [svgContainerRef]);
+
+  // Helper function to select opponent territory using directional logic
+  const selectOpponentTerritoryByDirection = useCallback(
+    (selectedTerritory: string, availableOpponents: Club[]): { territory: string; team: Club } | null => {
+      // Pick a random direction
+      const selectedDirection = getRandomDirection();
+      console.log(`🧭 Direction selected: ${selectedDirection}`);
+      console.log(`📍 Starting from territory: ${selectedTerritory}`);
+
+      // Show directional arrow
+      const arrowCoords = calculateArrowCoordinates(selectedTerritory, selectedDirection);
+      if (arrowCoords) {
+        setDirectionArrow({
+          ...arrowCoords,
+          direction: selectedDirection
+        });
+        // Don't hide the arrow automatically - keep it visible
+      }
+
+      // Get all enemy territories with their owning teams
+      const enemyTerritories = availableOpponents.flatMap((opponent) =>
+        opponent.territories.map((territory) => ({ territory, team: opponent }))
+      );
+      console.log(
+        `🎯 Enemy territories:`,
+        enemyTerritories.map((et) => `${et.territory} (${et.team.name})`)
+      );
+
+      // Find enemy territories in the selected direction from our selected territory
+      const targetsFromOurTerritory = findCountriesInDirection(
+        selectedTerritory,
+        selectedDirection,
+        Infinity,
+        [selectedTerritory] // exclude our own territory
+      );
+
+      // Filter to only include enemy territories and add team info
+      const enemyTargetsInDirection = targetsFromOurTerritory
+        .map((target) => {
+          const enemyInfo = enemyTerritories.find(
+            (et) => et.territory === target.country
+          );
+          return enemyInfo ? { ...target, team: enemyInfo.team, territory: target.country } : null;
+        })
+        .filter((target): target is { country: string; distance: number; direction: string; team: Club; territory: string } => target !== null);
+
+      console.log(
+        `🎯 Enemy territories found in direction ${selectedDirection}:`,
+        enemyTargetsInDirection.map(
+          (t) => `${t.territory} (${t.team.name}) - distance: ${t.distance.toFixed(1)}`
+        )
+      );
+
+      if (enemyTargetsInDirection.length > 0) {
+        // Sort by distance and pick the closest
+        enemyTargetsInDirection.sort((a, b) => a.distance - b.distance);
+        const closestTarget = enemyTargetsInDirection[0];
+        console.log(`🎯 Closest enemy territory: ${closestTarget.territory} (${closestTarget.team.name})`);
+        return { territory: closestTarget.territory, team: closestTarget.team };
+      } else {
+        console.log(`❌ No enemy territories found in direction ${selectedDirection}, falling back to random selection`);
+        // Fallback to random territory selection if no directional targets found
+        if (enemyTerritories.length > 0) {
+          const randomEnemyTerritory = enemyTerritories[Math.floor(Math.random() * enemyTerritories.length)];
+          console.log(`🎲 Random fallback: ${randomEnemyTerritory.territory} (${randomEnemyTerritory.team.name})`);
+          return randomEnemyTerritory;
+        }
+        return null;
+      }
+    },
+    [calculateArrowCoordinates, setDirectionArrow]
+  );
+
+  // Helper function to select opponent using directional logic (DEPRECATED - keeping for compatibility)
   const selectOpponentByDirection = useCallback(
     (currentTeam: Club, availableOpponents: Club[]): Club => {
       // Pick a random direction
@@ -469,6 +672,9 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       // Force a fresh evaluation of clubs by using a callback
       setSelectedTeam(null);
       setOpponentTeam(null);
+      setSelectedTeamTerritory(null); // Clear selected territory
+      setSelectedOpponentTerritory(null); // Clear opponent territory
+      setDirectionArrow(null); // Clear direction arrow
 
       // Set a flag to trigger team selection in useEffect when clubs update
       setIsTransitioningRound(false);
@@ -540,26 +746,50 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         console.log("Selected team:", randomTeam?.name);
         setSelectedTeam(randomTeam);
 
-        // Start opponent selection process
-        setIsSelectingOpponent(true);
+        // Start territory selection process for the selected team
+        setIsSelectingTeamTerritory(true);
         setTimeout(() => {
-          const remainingTeams = activeTeams.filter(
-            (club) => club.id !== randomTeam.id
-          );
+          // Select a random territory from the team's territories
+          const randomTerritoryIndex = Math.floor(Math.random() * randomTeam.territories.length);
+          const selectedTerritory = randomTeam.territories[randomTerritoryIndex];
+          setSelectedTeamTerritory(selectedTerritory);
+          setIsSelectingTeamTerritory(false);
+          
+          console.log(`🎯 Team ${randomTeam.name} selected territory: ${selectedTerritory}`);
+          
+          // Start opponent selection process after territory is selected
+          setTimeout(() => {
+            setIsSelectingOpponentTerritory(true);
+            setTimeout(() => {
+              const remainingTeams = activeTeams.filter(
+                (club) => club.id !== randomTeam.id
+              );
 
-          console.log(
-            "Possible opponents:",
-            remainingTeams.map((c) => c.name)
-          );
+              console.log("Looking for opponent territories from:", selectedTerritory);
 
-          // Use directional opponent selection instead of random
-          const selectedOpponent = selectOpponentByDirection(
-            randomTeam,
-            remainingTeams
-          );
-          console.log("Selected opponent:", selectedOpponent?.name);
-          setOpponentTeam(selectedOpponent);
-          setIsSelectingOpponent(false);
+              // Use territory-based opponent selection
+              const opponentTarget = selectOpponentTerritoryByDirection(
+                selectedTerritory,
+                remainingTeams
+              );
+              
+              if (opponentTarget) {
+                console.log(`Selected opponent territory: ${opponentTarget.territory} (${opponentTarget.team.name})`);
+                setSelectedOpponentTerritory(opponentTarget.territory);
+                setOpponentTeam(opponentTarget.team);
+              } else {
+                console.log("No opponent territory found, falling back to random team");
+                const randomOpponent = remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
+                const randomTerritoryIndex = Math.floor(Math.random() * randomOpponent.territories.length);
+                const randomTerritory = randomOpponent.territories[randomTerritoryIndex];
+                setSelectedOpponentTerritory(randomTerritory);
+                setOpponentTeam(randomOpponent);
+              }
+              
+              setIsSelectingOpponentTerritory(false);
+              setIsSelectingOpponent(false);
+            }, 500);
+          }, 200);
         }, 500);
       } else {
         console.log("Game over - not enough active teams");
@@ -573,7 +803,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     selectedTeam,
     opponentTeam,
     isTransitioningRound,
-    selectOpponentByDirection,
+    selectOpponentTerritoryByDirection,
   ]);
 
   // Debug function to clear localStorage
@@ -591,6 +821,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         localStorage.removeItem("imperializm-selectedTeam");
         localStorage.removeItem("imperializm-opponentTeam");
         localStorage.removeItem("imperializm-gameHistory");
+        localStorage.removeItem("imperializm-selectedTeamTerritory");
 
         // Reload the page to reset all state
         window.location.reload();
@@ -615,6 +846,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         localStorage.removeItem("imperializm-selectedTeam");
         localStorage.removeItem("imperializm-opponentTeam");
         localStorage.removeItem("imperializm-gameHistory");
+        localStorage.removeItem("imperializm-selectedTeamTerritory");
 
         // Create clubs from teams array using colors from colors.ts
         const initializedClubs: Club[] = teams.map((team, index) => ({
@@ -635,6 +867,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         setGameStarted(false);
         setSelectedTeam(null);
         setOpponentTeam(null);
+        setSelectedTeamTerritory(null);
         setGameHistory([]);
         setIsSelectingWinner(false);
         setIsTransitioningRound(false);
@@ -666,17 +899,51 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       setCurrentRound(1);
       setOpponentTeam(null);
 
-      // Start opponent selection process
-      setIsSelectingOpponent(true);
+      // Start territory selection process for the selected team
+      setIsSelectingTeamTerritory(true);
       setTimeout(() => {
-        // Filter out the selected team and eliminated teams to get remaining opponents
-        const remainingTeams = clubs.filter(
-          (club) => club.id !== randomTeam.id && !club.isEliminated
-        );
-        const randomOpponent =
-          remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
-        setOpponentTeam(randomOpponent);
-        setIsSelectingOpponent(false);
+        // Select a random territory from the team's territories
+        const randomTerritoryIndex = Math.floor(Math.random() * randomTeam.territories.length);
+        const selectedTerritory = randomTeam.territories[randomTerritoryIndex];
+        setSelectedTeamTerritory(selectedTerritory);
+        setIsSelectingTeamTerritory(false);
+        
+        console.log(`🎯 Team ${randomTeam.name} selected territory: ${selectedTerritory}`);
+        
+        // Start opponent selection process after territory is selected
+        setTimeout(() => {
+          setIsSelectingOpponentTerritory(true);
+          setTimeout(() => {
+            // Filter out the selected team and eliminated teams to get remaining opponents
+            const remainingTeams = clubs.filter(
+              (club) => club.id !== randomTeam.id && !club.isEliminated
+            );
+
+            console.log("Looking for opponent territories from:", selectedTerritory);
+
+            // Use territory-based opponent selection
+            const opponentTarget = selectOpponentTerritoryByDirection(
+              selectedTerritory,
+              remainingTeams
+            );
+            
+            if (opponentTarget) {
+              console.log(`Selected opponent territory: ${opponentTarget.territory} (${opponentTarget.team.name})`);
+              setSelectedOpponentTerritory(opponentTarget.territory);
+              setOpponentTeam(opponentTarget.team);
+            } else {
+              console.log("No opponent territory found, falling back to random team");
+              const randomOpponent = remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
+              const randomTerritoryIndex = Math.floor(Math.random() * randomOpponent.territories.length);
+              const randomTerritory = randomOpponent.territories[randomTerritoryIndex];
+              setSelectedOpponentTerritory(randomTerritory);
+              setOpponentTeam(randomOpponent);
+            }
+            
+            setIsSelectingOpponentTerritory(false);
+            setIsSelectingOpponent(false);
+          }, 500);
+        }, 200);
       }, 500);
     } else {
       // Start next round with new random team (don't increment round here, it's done in handleWinnerSelected)
@@ -686,17 +953,31 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       setSelectedTeam(randomTeam);
       setOpponentTeam(null);
 
-      // Start opponent selection process
-      setIsSelectingOpponent(true);
+      // Start territory selection process for the selected team
+      setIsSelectingTeamTerritory(true);
       setTimeout(() => {
-        // Filter out the selected team and eliminated teams to get remaining opponents
-        const remainingTeams = clubs.filter(
-          (club) => club.id !== randomTeam.id && !club.isEliminated
-        );
-        const randomOpponent =
-          remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
-        setOpponentTeam(randomOpponent);
-        setIsSelectingOpponent(false);
+        // Select a random territory from the team's territories
+        const randomTerritoryIndex = Math.floor(Math.random() * randomTeam.territories.length);
+        const selectedTerritory = randomTeam.territories[randomTerritoryIndex];
+        setSelectedTeamTerritory(selectedTerritory);
+        setIsSelectingTeamTerritory(false);
+        
+        console.log(`🎯 Team ${randomTeam.name} selected territory: ${selectedTerritory}`);
+        
+        // Start opponent selection process after territory is selected
+        setTimeout(() => {
+          setIsSelectingOpponent(true);
+          setTimeout(() => {
+            // Filter out the selected team and eliminated teams to get remaining opponents
+            const remainingTeams = clubs.filter(
+              (club) => club.id !== randomTeam.id && !club.isEliminated
+            );
+            const randomOpponent =
+              remainingTeams[Math.floor(Math.random() * remainingTeams.length)];
+            setOpponentTeam(randomOpponent);
+            setIsSelectingOpponent(false);
+          }, 500);
+        }, 200);
       }, 500);
     }
   };
@@ -997,17 +1278,13 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         fill = "#FF6B6B"; // Red for selected country
       }
 
-      // Apply dimming when there's an active match
-      if (selectedTeam && opponentTeam) {
-        const isSelectedTeamTerritory =
-          selectedTeam.territories.includes(territoryName);
-        const isOpponentTeamTerritory =
-          opponentTeam.territories.includes(territoryName);
-
-        // Only highlight territories involved in the current match
-        if (!isSelectedTeamTerritory && !isOpponentTeamTerritory) {
-          opacity = "0.3"; // Dim countries not involved in the match
+      // Apply dimming when there's an active match - only show the two territories involved
+      if (selectedTeamTerritory && selectedOpponentTerritory) {
+        // Keep full opacity only for the two territories involved in the battle
+        if (territoryName !== selectedTeamTerritory && territoryName !== selectedOpponentTerritory) {
+          opacity = "0.3"; // Dim all territories except the two involved in battle
         }
+        // The two battle territories keep their original colors and full opacity
       }
 
       if (originalPath) {
@@ -1040,7 +1317,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       />`;
       }
     },
-    [countriesWithClubs, selectedCountry, selectedTeam, opponentTeam]
+    [countriesWithClubs, selectedCountry, selectedTeamTerritory, selectedOpponentTerritory]
   );
 
   // Build SVG content from current territories state (state-driven approach)
@@ -1051,19 +1328,43 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       return svgContent;
     }
 
-    console.log(`🏗️ Building SVG from ${Object.keys(currentTerritories).length} current territories`);
+    // console.log(`🏗️ Building SVG from ${Object.keys(currentTerritories).length} current territories`);
     
     // Build all path elements from current territories
     const pathElements = Object.entries(currentTerritories).map(([territoryName, territoryData]) => {
       return createStyledPath(territoryName, territoryData.pathD);
     }).join('\n');
     
-    // Combine header, paths, and footer
-    const result = originalSvgStructure.header + pathElements + originalSvgStructure.footer;
+    // Add directional arrow if visible
+    let arrowElement = '';
+    if (directionArrow) {
+      arrowElement = `
+        <g id="direction-arrow">
+          <defs>
+            <marker id="arrow-head" markerWidth="10" markerHeight="7" 
+                    refX="9" refY="3.5" orient="auto">
+              <polygon points="0 0, 10 3.5, 0 7" fill="#ff6b35"/>
+            </marker>
+          </defs>
+          <line x1="${directionArrow.fromX}" y1="${directionArrow.fromY}" 
+                x2="${directionArrow.toX}" y2="${directionArrow.toY}" 
+                stroke="#ff6b35" stroke-width="2" 
+                marker-end="url(#arrow-head)"/>
+          <circle cx="${directionArrow.fromX}" cy="${directionArrow.fromY}" 
+                  r="3" fill="#ff6b35"/>
+          <text x="${directionArrow.fromX + 8}" y="${directionArrow.fromY - 8}" 
+                fill="#ff6b35" font-size="12" font-weight="bold">
+            ${directionArrow.direction}
+          </text>
+        </g>`;
+    }
     
-    console.log(`🎯 Generated SVG with ${Object.keys(currentTerritories).length} territories`);
+    // Combine header, paths, arrow, and footer
+    const result = originalSvgStructure.header + pathElements + arrowElement + originalSvgStructure.footer;
+    
+    // console.log(`🎯 Generated SVG with ${Object.keys(currentTerritories).length} territories`);
     return result;
-  }, [originalSvgStructure, currentTerritories, createStyledPath, svgContent]);
+  }, [originalSvgStructure, currentTerritories, createStyledPath, svgContent, directionArrow]);
 
   // Show loading screen only if we don't have any map data yet
   if (!svgContent && Object.keys(currentTerritories).length === 0) {
@@ -1176,11 +1477,12 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
               ></div>
               <span style={{ fontWeight: "600" }}>Wybrana drużyna:</span>
               <span style={{ fontWeight: "500", color: "#555" }}>
-                {selectedTeam.name} (
-                {selectedTeam.territories.length === 1
-                  ? selectedTeam.territories[0]
-                  : `${selectedTeam.territories.length} terytoriów`}
-                )
+                {isSelectingTeamTerritory 
+                  ? `${selectedTeam.name} (wybieranie terytorium...)`
+                  : selectedTeamTerritory 
+                    ? `${selectedTeam.name} (${selectedTeamTerritory})`
+                    : `${selectedTeam.name} (${selectedTeam.territories.length} terytoriów)`
+                }
               </span>
             </div>
 
@@ -1379,6 +1681,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
 
       {/* SVG Map Container */}
       <div
+        ref={mapContainerRef}
         className="svg-container"
         onWheel={handleWheel}
         onClick={(e) => {
