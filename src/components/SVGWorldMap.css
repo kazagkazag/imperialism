@@ -48,6 +48,11 @@
   --shadow-gray-medium: rgba(108, 117, 125, 0.4);
   --shadow-disabled: rgba(204, 204, 204, 0.3);
   
+  /* Barbarians/unoccupied territory color */
+  --barbarians-brown: #8B4513;
+  --barbarians-brown-light: #A0522D;
+  --barbarians-brown-hover: #654321;
+  
   /* Common spacing and sizing */
   --border-radius-sm: 4px;
   --border-radius-md: 6px;

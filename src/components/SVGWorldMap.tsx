@@ -479,9 +479,34 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     };
   }, [svgContainerRef, directionToRadians]);
 
-  // Helper function to select opponent territory using directional logic
+  // Helper function to get all occupied territories
+  const getOccupiedTerritories = useCallback((): string[] => {
+    return clubs.flatMap(club => club.territories);
+  }, [clubs]);
+
+  // Helper function to get all unoccupied territories
+  const getUnoccupiedTerritories = useCallback((): string[] => {
+    const occupiedTerritories = getOccupiedTerritories();
+    const allTerritories = Object.keys(currentTerritories);
+    return allTerritories.filter(territory => !occupiedTerritories.includes(territory));
+  }, [currentTerritories, getOccupiedTerritories]);
+
+  // Create a temporary Barbarzyńcy team for unoccupied territories
+  const createBarbariansTeam = useCallback((territory: string): Club => {
+    return {
+      id: `barbarians-${territory}`,
+      name: "Barbarzyńcy",
+      country: territory,
+      points: 0,
+      color: "#8B4513", // Brown color for barbarians
+      territories: [territory],
+      isEliminated: false
+    };
+  }, []);
+
+  // Helper function to select opponent territory using directional logic (with unoccupied territory support)
   const selectOpponentTerritoryByDirection = useCallback(
-    (selectedTerritory: string, availableOpponents: Club[]): { territory: string; team: Club } | null => {
+    (selectedTerritory: string, availableOpponents: Club[]): { territory: string; team: Club; isUnoccupied?: boolean } | null => {
       // Pick a random direction (0-35)
       const selectedDirection = getRandomDirection();
       const selectedDegrees = directionToDegrees(selectedDirection);
@@ -507,7 +532,11 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         enemyTerritories.map((et) => `${et.territory} (${et.team.name})`)
       );
 
-      // Find enemy territories in the selected direction from our selected territory
+      // Get unoccupied territories
+      const unoccupiedTerritories = getUnoccupiedTerritories();
+      console.log(`🏴 Unoccupied territories: ${unoccupiedTerritories.length} total`);
+
+      // Find ALL territories (both enemy and unoccupied) in the selected direction from our selected territory
       const targetsFromOurTerritory = findCountriesInDirectionDegrees(
         selectedTerritory,
         selectedDirection,
@@ -515,31 +544,43 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         [selectedTerritory] // exclude our own territory
       );
 
-      // Filter to only include enemy territories and add team info
+      // Separate enemy territories and unoccupied territories
       const enemyTargetsInDirection = targetsFromOurTerritory
         .map((target) => {
           const enemyInfo = enemyTerritories.find(
             (et) => et.territory === target.country
           );
-          return enemyInfo ? { ...target, team: enemyInfo.team, territory: target.country } : null;
+          return enemyInfo ? { ...target, team: enemyInfo.team, territory: target.country, isUnoccupied: false } : null;
         })
-        .filter((target): target is { country: string; distance: number; direction: number; team: Club; territory: string } => target !== null);
+        .filter((target): target is { country: string; distance: number; direction: number; team: Club; territory: string; isUnoccupied: false } => target !== null);
+
+      const unoccupiedTargetsInDirection = targetsFromOurTerritory
+        .filter((target) => unoccupiedTerritories.includes(target.country))
+        .map((target) => ({
+          ...target,
+          territory: target.country,
+          team: createBarbariansTeam(target.country),
+          isUnoccupied: true as const
+        }));
+
+      // Combine all targets and sort by distance
+      const allTargetsInDirection = [...enemyTargetsInDirection, ...unoccupiedTargetsInDirection];
+      allTargetsInDirection.sort((a, b) => a.distance - b.distance);
 
       console.log(
-        `🎯 Enemy territories found in direction ${selectedDirection} (${selectedDegrees}°):`,
-        enemyTargetsInDirection.map(
-          (t) => `${t.territory} (${t.team.name}) - distance: ${t.distance.toFixed(1)}`
+        `🎯 All targets found in direction ${selectedDirection} (${selectedDegrees}°):`,
+        allTargetsInDirection.map(
+          (t) => `${t.territory} (${t.isUnoccupied ? 'Barbarzyńcy' : t.team.name}) - distance: ${t.distance.toFixed(1)} ${t.isUnoccupied ? '🏴' : '⚔️'}`
         )
       );
 
-      if (enemyTargetsInDirection.length > 0) {
-        // Sort by distance and pick the closest
-        enemyTargetsInDirection.sort((a, b) => a.distance - b.distance);
-        const closestTarget = enemyTargetsInDirection[0];
-        console.log(`🎯 Closest enemy territory: ${closestTarget.territory} (${closestTarget.team.name})`);
-        return { territory: closestTarget.territory, team: closestTarget.team };
+      if (allTargetsInDirection.length > 0) {
+        // Pick the closest target (whether enemy or unoccupied)
+        const closestTarget = allTargetsInDirection[0];
+        console.log(`🎯 Closest target: ${closestTarget.territory} (${closestTarget.isUnoccupied ? 'Barbarzyńcy - unoccupied' : closestTarget.team.name}) ${closestTarget.isUnoccupied ? '🏴' : '⚔️'}`);
+        return { territory: closestTarget.territory, team: closestTarget.team, isUnoccupied: closestTarget.isUnoccupied };
       } else {
-        console.log(`❌ No enemy territories found in direction ${selectedDirection} (${selectedDegrees}°), trying other directions...`);
+        console.log(`❌ No targets found in direction ${selectedDirection} (${selectedDegrees}°), trying other directions...`);
         
         // Try other directions systematically (all 36 directions except the one we tried)
         const allDirections = Array.from({length: 36}, (_, i) => i); // [0, 1, 2, ..., 35]
@@ -561,12 +602,24 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
               const enemyInfo = enemyTerritories.find(
                 (et) => et.territory === target.country
               );
-              return enemyInfo ? { ...target, team: enemyInfo.team, territory: target.country } : null;
+              return enemyInfo ? { ...target, team: enemyInfo.team, territory: target.country, isUnoccupied: false } : null;
             })
-            .filter((target): target is { country: string; distance: number; direction: number; team: Club; territory: string } => target !== null);
+            .filter((target): target is { country: string; distance: number; direction: number; team: Club; territory: string; isUnoccupied: false } => target !== null);
+
+          const tryUnoccupiedTargets = tryTargets
+            .filter((target) => unoccupiedTerritories.includes(target.country))
+            .map((target) => ({
+              ...target,
+              territory: target.country,
+              team: createBarbariansTeam(target.country),
+              isUnoccupied: true as const
+            }));
+
+          const tryAllTargets = [...tryEnemyTargets, ...tryUnoccupiedTargets];
+          tryAllTargets.sort((a, b) => a.distance - b.distance);
           
-          if (tryEnemyTargets.length > 0) {
-            console.log(`✅ Found ${tryEnemyTargets.length} enemy territories in direction ${tryDirection} (${tryDegrees}°)`);
+          if (tryAllTargets.length > 0) {
+            console.log(`✅ Found ${tryAllTargets.length} targets in direction ${tryDirection} (${tryDegrees}°)`);
             
             // Update arrow to show the new direction
             const newArrowCoords = calculateArrowCoordinates(selectedTerritory, tryDirection);
@@ -577,27 +630,35 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
               });
             }
             
-            // Sort by distance and pick the closest
-            tryEnemyTargets.sort((a, b) => a.distance - b.distance);
-            const closestTarget = tryEnemyTargets[0];
-            console.log(`🎯 Closest enemy territory in ${tryDirection} (${tryDegrees}°): ${closestTarget.territory} (${closestTarget.team.name})`);
-            return { territory: closestTarget.territory, team: closestTarget.team };
+            // Pick the closest target
+            const closestTarget = tryAllTargets[0];
+            console.log(`🎯 Closest target in ${tryDirection} (${tryDegrees}°): ${closestTarget.territory} (${closestTarget.isUnoccupied ? 'Barbarzyńcy - unoccupied' : closestTarget.team.name}) ${closestTarget.isUnoccupied ? '🏴' : '⚔️'}`);
+            return { territory: closestTarget.territory, team: closestTarget.team, isUnoccupied: closestTarget.isUnoccupied };
           }
         }
         
-        console.log(`❌ No enemy territories found in any direction, falling back to random selection`);
+        console.log(`❌ No targets found in any direction, falling back to random selection`);
         // Final fallback to random territory selection if no directional targets found in any direction
         if (enemyTerritories.length > 0) {
           const randomEnemyTerritory = enemyTerritories[Math.floor(Math.random() * enemyTerritories.length)];
           console.log(`🎲 Random fallback: ${randomEnemyTerritory.territory} (${randomEnemyTerritory.team.name})`);
           // Clear arrow since we're not using directional logic
           setDirectionArrow(null);
-          return randomEnemyTerritory;
+          return { territory: randomEnemyTerritory.territory, team: randomEnemyTerritory.team, isUnoccupied: false };
         }
+        
+        // If no enemy territories available, try unoccupied as final fallback
+        if (unoccupiedTerritories.length > 0) {
+          const randomUnoccupiedTerritory = unoccupiedTerritories[Math.floor(Math.random() * unoccupiedTerritories.length)];
+          console.log(`🎲 Final fallback to unoccupied: ${randomUnoccupiedTerritory} (Barbarzyńcy)`);
+          setDirectionArrow(null);
+          return { territory: randomUnoccupiedTerritory, team: createBarbariansTeam(randomUnoccupiedTerritory), isUnoccupied: true };
+        }
+        
         return null;
       }
     },
-    [calculateArrowCoordinates, setDirectionArrow, findCountriesInDirectionDegrees, directionToDegrees]
+    [calculateArrowCoordinates, setDirectionArrow, findCountriesInDirectionDegrees, directionToDegrees, getUnoccupiedTerritories, createBarbariansTeam]
   );
 
   // Helper function to select opponent using directional logic (DEPRECATED - keeping for compatibility)
@@ -714,6 +775,14 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
 
   // Handle winner selection mode
   const handleSelectWinner = () => {
+    console.log("🎯 handleSelectWinner called");
+    console.log("Current state:", {
+      selectedTeam: selectedTeam?.name,
+      opponentTeam: opponentTeam?.name,
+      selectedOpponentTerritory,
+      isSelectingWinner,
+      isTransitioningRound
+    });
     setIsSelectingWinner(true);
   };
 
@@ -722,41 +791,63 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     if (!selectedTeam || !opponentTeam) return;
 
     const loser = winner.id === selectedTeam.id ? opponentTeam : selectedTeam;
+    const isBarbariansOpponent = opponentTeam.name === "Barbarzyńcy";
 
     console.log("=== BATTLE RESULT ===");
     console.log("Winner:", winner.name, "Territories:", winner.territories);
     console.log("Loser:", loser.name, "Territories:", loser.territories);
+    console.log("Is opponent Barbarzyńcy?", isBarbariansOpponent);
 
-    // Territory conquest: Winner takes one random territory from loser
-    if (loser.territories.length > 0) {
-      const randomTerritoryIndex = Math.floor(
-        Math.random() * loser.territories.length
-      );
-      const conqueredTerritory = loser.territories[randomTerritoryIndex];
-
-      // Update winner: add points and territory
-      if (onUpdateClub) {
-        onUpdateClub(winner.id, {
-          points: winner.points + 1,
-          territories: [...winner.territories, conqueredTerritory],
-        });
+    // Territory conquest logic
+    if (isBarbariansOpponent) {
+      // Battle against Barbarzyńcy (unoccupied territory)
+      if (winner.id === selectedTeam.id) {
+        // Player team won against Barbarzyńcy - they conquer the unoccupied territory
+        const conqueredTerritory = selectedOpponentTerritory;
+        console.log("🏴 Player team conquered unoccupied territory:", conqueredTerritory);
+        
+        if (onUpdateClub && conqueredTerritory) {
+          onUpdateClub(winner.id, {
+            points: winner.points + 1,
+            territories: [...winner.territories, conqueredTerritory],
+          });
+        }
+      } else {
+        // Barbarzyńcy won - nothing happens, player team keeps their territories
+        console.log("🏴 Barbarzyńcy defended their territory - no territorial changes");
       }
+    } else {
+      // Normal battle between two player teams
+      if (loser.territories.length > 0) {
+        const randomTerritoryIndex = Math.floor(
+          Math.random() * loser.territories.length
+        );
+        const conqueredTerritory = loser.territories[randomTerritoryIndex];
 
-      // Update loser: remove territory and check elimination
-      const newLoserTerritories = loser.territories.filter(
-        (_, index) => index !== randomTerritoryIndex
-      );
-      const isLoserEliminated = newLoserTerritories.length === 0;
+        // Update winner: add points and territory
+        if (onUpdateClub) {
+          onUpdateClub(winner.id, {
+            points: winner.points + 1,
+            territories: [...winner.territories, conqueredTerritory],
+          });
+        }
 
-      console.log("Territory conquered:", conqueredTerritory);
-      console.log("Loser territories after loss:", newLoserTerritories);
-      console.log("Is loser eliminated?", isLoserEliminated);
+        // Update loser: remove territory and check elimination
+        const newLoserTerritories = loser.territories.filter(
+          (_, index) => index !== randomTerritoryIndex
+        );
+        const isLoserEliminated = newLoserTerritories.length === 0;
 
-      if (onUpdateClub) {
-        onUpdateClub(loser.id, {
-          territories: newLoserTerritories,
-          isEliminated: isLoserEliminated,
-        });
+        console.log("Territory conquered:", conqueredTerritory);
+        console.log("Loser territories after loss:", newLoserTerritories);
+        console.log("Is loser eliminated?", isLoserEliminated);
+
+        if (onUpdateClub) {
+          onUpdateClub(loser.id, {
+            territories: newLoserTerritories,
+            isEliminated: isLoserEliminated,
+          });
+        }
       }
     }
 
@@ -816,6 +907,12 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     }
 
     if (opponentTeam) {
+      // Special case: Don't try to refresh Barbarzyńcy teams as they're temporary and not in clubs array
+      if (opponentTeam.name === "Barbarzyńcy") {
+        // Keep the Barbarzyńcy team as-is, don't try to find it in clubs
+        return;
+      }
+      
       const updatedOpponentTeam = clubs.find(
         (club) => club.id === opponentTeam.id
       );
@@ -888,7 +985,11 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
               
               if (opponentTarget) {
                 const opponentOriginalTerritory = opponentTarget.team.country; // Team's original home country
-                console.log(`🎯 ${opponentTarget.team.name} (${opponentOriginalTerritory}, ${opponentTarget.territory})`);
+                if (opponentTarget.isUnoccupied) {
+                  console.log(`🏴 ${opponentTarget.team.name} (${opponentTarget.territory}) - unoccupied territory`);
+                } else {
+                  console.log(`🎯 ${opponentTarget.team.name} (${opponentOriginalTerritory}, ${opponentTarget.territory})`);
+                }
                 setSelectedOpponentTerritory(opponentTarget.territory);
                 setOpponentTeam(opponentTarget.team);
               } else {
@@ -1044,7 +1145,11 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
             
             if (opponentTarget) {
               const opponentOriginalTerritory = opponentTarget.team.country; // Team's original home country
-              console.log(`🎯 ${opponentTarget.team.name} (${opponentOriginalTerritory}, ${opponentTarget.territory})`);
+              if (opponentTarget.isUnoccupied) {
+                console.log(`🏴 ${opponentTarget.team.name} (${opponentTarget.territory}) - unoccupied territory`);
+              } else {
+                console.log(`🎯 ${opponentTarget.team.name} (${opponentOriginalTerritory}, ${opponentTarget.territory})`);
+              }
               setSelectedOpponentTerritory(opponentTarget.territory);
               setOpponentTeam(opponentTarget.team);
             } else {
@@ -1388,6 +1493,12 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       const territoryClub = countriesWithClubs[territoryName];
       if (territoryClub && territoryClub.length > 0) {
         fill = territoryClub[0].color; // Use the club's color
+      } else {
+        // Check if it's an unoccupied territory (not assigned to any club)
+        const allOccupiedTerritories = clubs.flatMap(club => club.territories);
+        if (!allOccupiedTerritories.includes(territoryName)) {
+          fill = "#8B4513"; // Brown color for unoccupied territories (Barbarzyńcy)
+        }
       }
 
       // Override with selection color if selected
@@ -1434,7 +1545,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       />`;
       }
     },
-    [countriesWithClubs, selectedCountry, selectedTeamTerritory, selectedOpponentTerritory]
+    [countriesWithClubs, selectedCountry, selectedTeamTerritory, selectedOpponentTerritory, clubs]
   );
 
   // Build SVG content from current territories state (state-driven approach)
@@ -1648,9 +1759,14 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
                 </span>
                 <span style={{ fontWeight: "500", color: "#555" }}>
                   {(() => {
-                    const originalTerritory = opponentTeam.country; // Team's original home country
-                    const territory = selectedOpponentTerritory || 'losowanie...';
-                    return `${opponentTeam.name} (${originalTerritory}, ${territory})`;
+                    if (opponentTeam.name === "Barbarzyńcy") {
+                      const territory = selectedOpponentTerritory || 'losowanie...';
+                      return `${opponentTeam.name} (${territory}) 🏴`;
+                    } else {
+                      const originalTerritory = opponentTeam.country; // Team's original home country
+                      const territory = selectedOpponentTerritory || 'losowanie...';
+                      return `${opponentTeam.name} (${originalTerritory}, ${territory})`;
+                    }
                   })()}
                 </span>
 
@@ -1711,9 +1827,14 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
                           }}
                         >
                           {(() => {
-                            const originalTerritory = opponentTeam.country; // Team's original home country
-                            const territory = selectedOpponentTerritory || 'unknown';
-                            return `${opponentTeam.name} (${originalTerritory}, ${territory})`;
+                            if (opponentTeam.name === "Barbarzyńcy") {
+                              const territory = selectedOpponentTerritory || 'unknown';
+                              return `${opponentTeam.name} (${territory}) 🏴`;
+                            } else {
+                              const originalTerritory = opponentTeam.country; // Team's original home country
+                              const territory = selectedOpponentTerritory || 'unknown';
+                              return `${opponentTeam.name} (${originalTerritory}, ${territory})`;
+                            }
                           })()}
                         </button>
                       )}
