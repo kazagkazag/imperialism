@@ -3,7 +3,6 @@ import "./SVGWorldMap.css";
 import { teams } from "../teams";
 import { teamColors } from "../colors";
 import {
-  findCountriesInDirection,
   getCountryCenter,
 } from "../countryCoordinates";
 import { splitSvgPathAuto } from "../splitTerritory";
@@ -72,7 +71,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     fromY: number;
     toX: number;
     toY: number;
-    direction: string;
+    direction: number; // Changed from string to number
   } | null>(null);
 
   // State to track split territories (keeping for backward compatibility)
@@ -334,14 +333,95 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     }
   }, [currentTerritories, originalPaths, originalSvgStructure]);
 
-  // Helper function to pick a random direction
-  const getRandomDirection = (): string => {
-    const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-    return directions[Math.floor(Math.random() * directions.length)];
+  // Helper function to pick a random direction (0-35, representing 0°, 10°, 20°, ..., 350°)
+  const getRandomDirection = (): number => {
+    return Math.floor(Math.random() * 36); // 0 to 35
   };
 
+  // Helper function to convert direction index to degrees
+  const directionToDegrees = useCallback((direction: number): number => {
+    return (direction * 10) % 360; // 0°, 10°, 20°, ..., 350°
+  }, []);
+
+  // Helper function to convert direction index to radians
+  const directionToRadians = useCallback((direction: number): number => {
+    const degrees = directionToDegrees(direction);
+    return (degrees * Math.PI) / 180;
+  }, [directionToDegrees]);
+
+  // Helper function to find countries in a specific direction using degrees
+  const findCountriesInDirectionDegrees = useCallback((
+    fromCountry: string,
+    targetDirection: number, // 0-35 representing 0°, 10°, 20°, etc.
+    maxDistance: number = Infinity,
+    excludeCountries: string[] = [],
+    toleranceDegrees: number = 15 // Allow ±15° tolerance
+  ): Array<{ country: string; distance: number; direction: number }> => {
+    // Get the actual center of the FROM territory using SVG bounding box
+    const svgContainer = svgContainerRef.current;
+    if (!svgContainer) return [];
+    
+    const fromElement = svgContainer.querySelector(`path[data-country="${fromCountry}"]`);
+    if (!fromElement) {
+      console.log(`❌ Could not find SVG element for fromCountry: ${fromCountry}`);
+      return [];
+    }
+    
+    const fromBbox = (fromElement as SVGPathElement).getBBox();
+    const fromCenter = {
+      x: fromBbox.x + fromBbox.width / 2,
+      y: fromBbox.y + fromBbox.height / 2
+    };
+    
+    const results: Array<{ country: string; distance: number; direction: number }> = [];
+    const targetAngle = directionToDegrees(targetDirection);
+    
+    Object.entries(currentTerritories).forEach(([country, territoryData]) => {
+      if (country === fromCountry || excludeCountries.includes(country)) return;
+      
+      // Get the actual center of the TO territory using SVG bounding box
+      const toElement = svgContainer.querySelector(`path[data-country="${country}"]`);
+      if (!toElement) return;
+      
+      const toBbox = (toElement as SVGPathElement).getBBox();
+      const toCenter = {
+        x: toBbox.x + toBbox.width / 2,
+        y: toBbox.y + toBbox.height / 2
+      };
+      
+      const distance = Math.sqrt(
+        Math.pow(toCenter.x - fromCenter.x, 2) + Math.pow(toCenter.y - fromCenter.y, 2)
+      );
+      if (distance > maxDistance) return;
+      
+      // Calculate angle from fromCenter to toCenter
+      // Note: SVG has Y increasing downward, but we want 0°=East, 90°=South, 180°=West, 270°=North
+      const deltaX = toCenter.x - fromCenter.x;
+      const deltaY = toCenter.y - fromCenter.y; // Keep Y as-is since we want South to be +90°
+      let angleDegrees = (Math.atan2(deltaY, deltaX) * 180) / Math.PI;
+      
+      // Normalize angle to 0-360 range
+      if (angleDegrees < 0) angleDegrees += 360;
+      
+      // Check if angle is within tolerance of target direction
+      let angleDiff = Math.abs(angleDegrees - targetAngle);
+      if (angleDiff > 180) angleDiff = 360 - angleDiff; // Handle wraparound
+      
+      if (angleDiff <= toleranceDegrees) {
+        // console.log(`✅ ${country} matches direction ${targetDirection} (${targetAngle}°) within tolerance`);
+        results.push({ 
+          country, 
+          distance, 
+          direction: targetDirection 
+        });
+      }
+    });
+    
+    return results.sort((a, b) => a.distance - b.distance);
+  }, [currentTerritories, directionToDegrees, svgContainerRef]);
+
   // Helper function to calculate arrow coordinates from territory center
-  const calculateArrowCoordinates = useCallback((territoryName: string, direction: string): {
+  const calculateArrowCoordinates = useCallback((territoryName: string, direction: number): {
     fromX: number;
     fromY: number;
     toX: number;
@@ -363,12 +443,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       if (!center) return null;
       
       const arrowLength = 100;
-      const directionAngles: Record<string, number> = {
-        'N': -Math.PI / 2, 'NE': -Math.PI / 4, 'E': 0, 'SE': Math.PI / 4,
-        'S': Math.PI / 2, 'SW': 3 * Math.PI / 4, 'W': Math.PI, 'NW': -3 * Math.PI / 4
-      };
-      const angle = directionAngles[direction];
-      if (angle === undefined) return null;
+      const angle = directionToRadians(direction);
       
       return {
         fromX: center.x,
@@ -390,19 +465,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     const arrowLength = 100;
     
     // Convert direction to angle in radians
-    const directionAngles: Record<string, number> = {
-      'N': -Math.PI / 2,    // -90 degrees
-      'NE': -Math.PI / 4,   // -45 degrees
-      'E': 0,               // 0 degrees
-      'SE': Math.PI / 4,    // 45 degrees
-      'S': Math.PI / 2,     // 90 degrees
-      'SW': 3 * Math.PI / 4, // 135 degrees
-      'W': Math.PI,         // 180 degrees
-      'NW': -3 * Math.PI / 4 // -135 degrees
-    };
-
-    const angle = directionAngles[direction];
-    if (angle === undefined) return null;
+    const angle = directionToRadians(direction);
 
     // Calculate end point
     const toX = centerX + Math.cos(angle) * arrowLength;
@@ -414,14 +477,15 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       toX,
       toY
     };
-  }, [svgContainerRef]);
+  }, [svgContainerRef, directionToRadians]);
 
   // Helper function to select opponent territory using directional logic
   const selectOpponentTerritoryByDirection = useCallback(
     (selectedTerritory: string, availableOpponents: Club[]): { territory: string; team: Club } | null => {
-      // Pick a random direction
+      // Pick a random direction (0-35)
       const selectedDirection = getRandomDirection();
-      console.log(`🧭 Direction selected: ${selectedDirection}`);
+      const selectedDegrees = directionToDegrees(selectedDirection);
+      console.log(`🧭 Direction selected: ${selectedDirection} (${selectedDegrees}°)`);
       console.log(`📍 Starting from territory: ${selectedTerritory}`);
 
       // Show directional arrow
@@ -444,7 +508,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       );
 
       // Find enemy territories in the selected direction from our selected territory
-      const targetsFromOurTerritory = findCountriesInDirection(
+      const targetsFromOurTerritory = findCountriesInDirectionDegrees(
         selectedTerritory,
         selectedDirection,
         Infinity,
@@ -459,10 +523,10 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
           );
           return enemyInfo ? { ...target, team: enemyInfo.team, territory: target.country } : null;
         })
-        .filter((target): target is { country: string; distance: number; direction: string; team: Club; territory: string } => target !== null);
+        .filter((target): target is { country: string; distance: number; direction: number; team: Club; territory: string } => target !== null);
 
       console.log(
-        `🎯 Enemy territories found in direction ${selectedDirection}:`,
+        `🎯 Enemy territories found in direction ${selectedDirection} (${selectedDegrees}°):`,
         enemyTargetsInDirection.map(
           (t) => `${t.territory} (${t.team.name}) - distance: ${t.distance.toFixed(1)}`
         )
@@ -475,16 +539,17 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         console.log(`🎯 Closest enemy territory: ${closestTarget.territory} (${closestTarget.team.name})`);
         return { territory: closestTarget.territory, team: closestTarget.team };
       } else {
-        console.log(`❌ No enemy territories found in direction ${selectedDirection}, trying other directions...`);
+        console.log(`❌ No enemy territories found in direction ${selectedDirection} (${selectedDegrees}°), trying other directions...`);
         
-        // Try other directions systematically
-        const allDirections = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+        // Try other directions systematically (all 36 directions except the one we tried)
+        const allDirections = Array.from({length: 36}, (_, i) => i); // [0, 1, 2, ..., 35]
         const remainingDirections = allDirections.filter(dir => dir !== selectedDirection);
         
         for (const tryDirection of remainingDirections) {
-          console.log(`🔄 Trying direction: ${tryDirection}`);
+          const tryDegrees = directionToDegrees(tryDirection);
+          console.log(`🔄 Trying direction: ${tryDirection} (${tryDegrees}°)`);
           
-          const tryTargets = findCountriesInDirection(
+          const tryTargets = findCountriesInDirectionDegrees(
             selectedTerritory,
             tryDirection,
             Infinity,
@@ -498,10 +563,10 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
               );
               return enemyInfo ? { ...target, team: enemyInfo.team, territory: target.country } : null;
             })
-            .filter((target): target is { country: string; distance: number; direction: string; team: Club; territory: string } => target !== null);
+            .filter((target): target is { country: string; distance: number; direction: number; team: Club; territory: string } => target !== null);
           
           if (tryEnemyTargets.length > 0) {
-            console.log(`✅ Found ${tryEnemyTargets.length} enemy territories in direction ${tryDirection}`);
+            console.log(`✅ Found ${tryEnemyTargets.length} enemy territories in direction ${tryDirection} (${tryDegrees}°)`);
             
             // Update arrow to show the new direction
             const newArrowCoords = calculateArrowCoordinates(selectedTerritory, tryDirection);
@@ -515,7 +580,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
             // Sort by distance and pick the closest
             tryEnemyTargets.sort((a, b) => a.distance - b.distance);
             const closestTarget = tryEnemyTargets[0];
-            console.log(`🎯 Closest enemy territory in ${tryDirection}: ${closestTarget.territory} (${closestTarget.team.name})`);
+            console.log(`🎯 Closest enemy territory in ${tryDirection} (${tryDegrees}°): ${closestTarget.territory} (${closestTarget.team.name})`);
             return { territory: closestTarget.territory, team: closestTarget.team };
           }
         }
@@ -532,15 +597,16 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         return null;
       }
     },
-    [calculateArrowCoordinates, setDirectionArrow]
+    [calculateArrowCoordinates, setDirectionArrow, findCountriesInDirectionDegrees, directionToDegrees]
   );
 
   // Helper function to select opponent using directional logic (DEPRECATED - keeping for compatibility)
   const selectOpponentByDirection = useCallback(
     (currentTeam: Club, availableOpponents: Club[]): Club => {
-      // Pick a random direction
+      // Pick a random direction (0-35)
       const selectedDirection = getRandomDirection();
-      console.log(`🧭 Direction selected: ${selectedDirection}`);
+      const selectedDegrees = directionToDegrees(selectedDirection);
+      console.log(`🧭 Direction selected: ${selectedDirection} (${selectedDegrees}°)`);
 
       // Get all territories of the current team
       const currentTerritories = currentTeam.territories;
@@ -559,12 +625,12 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       let directionalTargets: Array<{
         country: string;
         distance: number;
-        direction: string;
+        direction: number;
         team: Club;
       }> = [];
 
       for (const ourTerritory of currentTerritories) {
-        const targetsFromThisTerritory = findCountriesInDirection(
+        const targetsFromThisTerritory = findCountriesInDirectionDegrees(
           ourTerritory,
           selectedDirection,
           Infinity,
@@ -585,7 +651,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
             ): target is {
               country: string;
               distance: number;
-              direction: string;
+              direction: number;
               team: Club;
             } => target !== null
           );
@@ -619,7 +685,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         ];
       }
     },
-    []
+    [directionToDegrees, findCountriesInDirectionDegrees]
   );
 
   // Handle opponent reselection
@@ -801,8 +867,8 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
           const selectedTerritory = randomTeam.territories[randomTerritoryIndex];
           setSelectedTeamTerritory(selectedTerritory);
           setIsSelectingTeamTerritory(false);
-          
-          console.log(`🎯 Team ${randomTeam.name} selected territory: ${selectedTerritory}`);
+          const originalTerritory = randomTeam.country; // Club's original home country
+          console.log(`🎯 ${randomTeam.name} (${originalTerritory}, ${selectedTerritory})`);
           
           // Start opponent selection process after territory is selected
           setTimeout(() => {
@@ -821,7 +887,8 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
               );
               
               if (opponentTarget) {
-                console.log(`Selected opponent territory: ${opponentTarget.territory} (${opponentTarget.team.name})`);
+                const opponentOriginalTerritory = opponentTarget.team.country; // Team's original home country
+                console.log(`🎯 ${opponentTarget.team.name} (${opponentOriginalTerritory}, ${opponentTarget.territory})`);
                 setSelectedOpponentTerritory(opponentTarget.territory);
                 setOpponentTeam(opponentTarget.team);
               } else {
@@ -851,6 +918,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     opponentTeam,
     isTransitioningRound,
     selectOpponentTerritoryByDirection,
+    currentTerritories,
   ]);
 
   // Debug function to clear localStorage
@@ -975,7 +1043,8 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
             );
             
             if (opponentTarget) {
-              console.log(`Selected opponent territory: ${opponentTarget.territory} (${opponentTarget.team.name})`);
+              const opponentOriginalTerritory = opponentTarget.team.country; // Team's original home country
+              console.log(`🎯 ${opponentTarget.team.name} (${opponentOriginalTerritory}, ${opponentTarget.territory})`);
               setSelectedOpponentTerritory(opponentTarget.territory);
               setOpponentTeam(opponentTarget.team);
             } else {
@@ -1009,7 +1078,8 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         setSelectedTeamTerritory(selectedTerritory);
         setIsSelectingTeamTerritory(false);
         
-        console.log(`🎯 Team ${randomTeam.name} selected territory: ${selectedTerritory}`);
+        const originalTerritory = randomTeam.country; // Club's original home country
+        console.log(`🎯 ${randomTeam.name} (${originalTerritory}, ${selectedTerritory})`);
         
         // Start opponent selection process after territory is selected
         setTimeout(() => {
@@ -1401,7 +1471,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
                   r="3" fill="#ff6b35"/>
           <text x="${directionArrow.fromX + 8}" y="${directionArrow.fromY - 8}" 
                 fill="#ff6b35" font-size="12" font-weight="bold">
-            ${directionArrow.direction}
+            ${directionToDegrees(directionArrow.direction)}°
           </text>
         </g>`;
     }
@@ -1411,7 +1481,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     
     // console.log(`🎯 Generated SVG with ${Object.keys(currentTerritories).length} territories`);
     return result;
-  }, [originalSvgStructure, currentTerritories, createStyledPath, svgContent, directionArrow]);
+  }, [originalSvgStructure, currentTerritories, createStyledPath, svgContent, directionArrow, directionToDegrees]);
 
   // Show loading screen only if we don't have any map data yet
   if (!svgContent && Object.keys(currentTerritories).length === 0) {
@@ -1527,7 +1597,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
                 {isSelectingTeamTerritory 
                   ? `${selectedTeam.name} (wybieranie terytorium...)`
                   : selectedTeamTerritory 
-                    ? `${selectedTeam.name} (${selectedTeamTerritory})`
+                    ? `${selectedTeam.name} (${selectedTeam.country}, ${selectedTeamTerritory})`
                     : `${selectedTeam.name} (${selectedTeam.territories.length} terytoriów)`
                 }
               </span>
@@ -1577,7 +1647,11 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
                   Wylosowano przeciwnika:
                 </span>
                 <span style={{ fontWeight: "500", color: "#555" }}>
-                  {opponentTeam.name} ({opponentTeam.country})
+                  {(() => {
+                    const originalTerritory = opponentTeam.country; // Team's original home country
+                    const territory = selectedOpponentTerritory || 'losowanie...';
+                    return `${opponentTeam.name} (${originalTerritory}, ${territory})`;
+                  })()}
                 </span>
 
                 {/* Action Buttons */}
@@ -1610,7 +1684,11 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
                               : `0 1px 3px ${selectedTeam.color}50`,
                           }}
                         >
-                          {selectedTeam.name}
+                          {(() => {
+                            const originalTerritory = selectedTeam.country; // Team's original home country
+                            const territory = selectedTeamTerritory || selectedTeam.territories[0];
+                            return `${selectedTeam.name} (${originalTerritory}, ${territory})`;
+                          })()}
                         </button>
                       )}
                       {opponentTeam && (
@@ -1632,7 +1710,11 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
                               : `0 1px 3px ${opponentTeam.color}50`,
                           }}
                         >
-                          {opponentTeam.name}
+                          {(() => {
+                            const originalTerritory = opponentTeam.country; // Team's original home country
+                            const territory = selectedOpponentTerritory || 'unknown';
+                            return `${opponentTeam.name} (${originalTerritory}, ${territory})`;
+                          })()}
                         </button>
                       )}
                       <button
