@@ -261,7 +261,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     }
 
     // Fallback: fetch SVG and extract paths as before
-    fetch("/map.svg")
+    fetch(`${process.env.PUBLIC_URL}/map.svg`)
       .then((response) => response.text())
       .then((data) => {
         console.log("📥 Loading original SVG and extracting territories");
