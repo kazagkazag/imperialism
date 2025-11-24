@@ -1353,8 +1353,6 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     const timeoutId = setTimeout(() => {
       const paths = container.querySelectorAll("path");
 
-      console.log("Setting up event listeners for", paths.length, "paths");
-
       const getCountryName = (target: SVGPathElement): string => {
         return (
           target.getAttribute("data-country") ||
@@ -1371,17 +1369,11 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       };
 
       const handlePathClick = (e: Event) => {
-        console.log("=== PATH CLICK EVENT FIRED ===");
         // Prevent click if we just finished dragging
         if (wasDraggingRef.current) {
-          e.stopPropagation();
-          e.preventDefault();
           wasDraggingRef.current = false; // Reset for next interaction
           return;
         }
-        
-        e.stopPropagation();
-        e.preventDefault();
 
         const target = e.target as SVGPathElement;
         const countryName = getCountryName(target);
@@ -1392,7 +1384,6 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       };
 
       const handlePathMouseEnter = (e: Event) => {
-        console.log("--- Mouse enter event fired ---");
         const target = e.target as SVGPathElement;
         const countryName = getCountryName(target);
 
@@ -1406,29 +1397,16 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
       };
 
       // Add event listeners to all paths
-      paths.forEach((path, index) => {
+      paths.forEach((path) => {
         path.addEventListener("click", handlePathClick);
         path.addEventListener("mouseenter", handlePathMouseEnter);
         path.addEventListener("mouseleave", handlePathMouseLeave);
         path.style.cursor = "pointer";
         path.style.pointerEvents = "auto";
-
-        // Debug: log first few paths
-        if (index < 3) {
-          console.log(`Path ${index}:`, {
-            id: path.id,
-            dataName: path.getAttribute("data-name"),
-            title: path.getAttribute("title"),
-            className: path.className.baseVal,
-          });
-        }
       });
-
-      console.log("Event listeners attached to all paths");
 
       // Cleanup function
       return () => {
-        console.log("Cleaning up event listeners");
         paths.forEach((path) => {
           path.removeEventListener("click", handlePathClick);
           path.removeEventListener("mouseenter", handlePathMouseEnter);
@@ -1944,9 +1922,28 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         {/* Hover display removed to prevent re-renders */}
         {selectedCountry && (
           <div className="selected-country-info">
-            <h3 className="selected-country-title">
-              Selected: {selectedCountry.name}
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 className="selected-country-title">
+                Selected: {selectedCountry.name}
+              </h3>
+              <button
+                onClick={() => setSelectedCountry(null)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  padding: '0 8px',
+                  color: '#666',
+                  lineHeight: '1',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#000'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#666'}
+                title="Close"
+              >
+                ×
+              </button>
+            </div>
             <p className="country-id-text">Country ID: {selectedCountry.id}</p>
 
             {countriesWithClubs[selectedCountry.name] &&
@@ -2011,28 +2008,35 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         onWheel={handleWheel}
         style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
         onClick={(e) => {
-          // This handler is for clicking on the container itself (not paths)
-          // Path clicks are handled by addEventListener in the useEffect
-          const target = e.target as SVGPathElement;
-          console.log("Container click - target:", target.tagName);
+          // Don't handle clicks if we were just dragging
+          if (wasDraggingRef.current) {
+            return;
+          }
+          
+          const target = e.target as HTMLElement;
+          
+          // If clicking on a path, select the country
           if (target.tagName === "path" || target.tagName === "PATH") {
-            // Extract country name from the data-country attribute we added
+            const pathElement = target as unknown as SVGPathElement;
             const countryName =
-              target.getAttribute("data-country") ||
-              target.getAttribute("data-name") ||
-              target.getAttribute("title") ||
-              target.id
+              pathElement.getAttribute("data-country") ||
+              pathElement.getAttribute("data-name") ||
+              pathElement.getAttribute("title") ||
+              pathElement.id
                 ?.replace(/-/g, " ")
                 .replace(/\b\w/g, (l: string) => l.toUpperCase()) ||
-              target.className?.baseVal
+              pathElement.className?.baseVal
                 ?.replace(/-/g, " ")
                 .replace(/\b\w/g, (l: string) => l.toUpperCase());
-
-            console.log("Extracted country name:", countryName); // Debug log
+            
             if (countryName) {
               handleCountryClick(countryName);
             }
+            return;
           }
+          
+          // Close popup for clicks on empty areas (ocean/svg background)
+          setSelectedCountry(null);
         }}
         onMouseOver={(e) => {
           const target = e.target as SVGPathElement;
