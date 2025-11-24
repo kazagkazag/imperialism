@@ -1698,13 +1698,13 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
 
       {/* Zoom Controls - Moved to bottom left */}
       <div className="zoom-controls">
-        <button onClick={zoomIn} className="zoom-button" title="Zoom In">
+        <button onClick={zoomIn} className="zoom-button" title="Powiększ">
           +
         </button>
-        <button onClick={zoomOut} className="zoom-button" title="Zoom Out">
+        <button onClick={zoomOut} className="zoom-button" title="Pomniejsz">
           −
         </button>
-        <button onClick={resetZoom} className="zoom-button" title="Reset Zoom">
+        <button onClick={resetZoom} className="zoom-button" title="Resetuj powiększenie">
           ⌂
         </button>
       </div>
@@ -1881,11 +1881,11 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
                         >
                           {(() => {
                             if (opponentTeam.name === "Barbarzyńcy") {
-                              const territory = selectedOpponentTerritory || 'unknown';
+                              const territory = selectedOpponentTerritory || 'nieznane';
                               return `${opponentTeam.name} (${territory}) 🏴`;
                             } else {
                               const originalTerritory = opponentTeam.country; // Team's original home country
-                              const territory = selectedOpponentTerritory || 'unknown';
+                              const territory = selectedOpponentTerritory || 'nieznane';
                               return `${opponentTeam.name} (${originalTerritory}, ${territory})`;
                             }
                           })()}
@@ -1924,7 +1924,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
           <div className="selected-country-info">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 className="selected-country-title">
-                Selected: {selectedCountry.name}
+                Wybrano: {selectedCountry.name}
               </h3>
               <button
                 onClick={() => setSelectedCountry(null)}
@@ -1939,12 +1939,12 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.color = '#000'}
                 onMouseLeave={(e) => e.currentTarget.style.color = '#666'}
-                title="Close"
+                title="Zamknij"
               >
                 ×
               </button>
             </div>
-            <p className="country-id-text">Country ID: {selectedCountry.id}</p>
+            <p className="country-id-text">ID kraju: {selectedCountry.id}</p>
 
             {countriesWithClubs[selectedCountry.name] &&
               countriesWithClubs[selectedCountry.name].length > 0 && (
@@ -1993,7 +1993,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
                     (e.currentTarget.style.backgroundColor = "#FF6B6B")
                   }
                 >
-                  Split Territory
+                  Podziel terytorium
                 </button>
               </div>
             )}
