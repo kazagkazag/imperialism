@@ -1,15 +1,15 @@
 {
   "files": {
     "main.css": "/imperialism/static/css/main.ea39b7c6.css",
-    "main.js": "/imperialism/static/js/main.fc6e1968.js",
+    "main.js": "/imperialism/static/js/main.cb502a6f.js",
     "static/js/453.6fb6fb9c.chunk.js": "/imperialism/static/js/453.6fb6fb9c.chunk.js",
     "index.html": "/imperialism/index.html",
     "main.ea39b7c6.css.map": "/imperialism/static/css/main.ea39b7c6.css.map",
-    "main.fc6e1968.js.map": "/imperialism/static/js/main.fc6e1968.js.map",
+    "main.cb502a6f.js.map": "/imperialism/static/js/main.cb502a6f.js.map",
     "453.6fb6fb9c.chunk.js.map": "/imperialism/static/js/453.6fb6fb9c.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.ea39b7c6.css",
-    "static/js/main.fc6e1968.js"
+    "static/js/main.cb502a6f.js"
   ]
 }
