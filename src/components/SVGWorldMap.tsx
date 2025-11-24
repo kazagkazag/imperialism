@@ -83,6 +83,8 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
   }>({});
   const [zoom, setZoom] = useState<number>(1);
   const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const wasDraggingRef = useRef<boolean>(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   // Load game state from localStorage or initialize with defaults
   const [currentRound, setCurrentRound] = useState<number>(() => {
@@ -1370,18 +1372,22 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
 
       const handlePathClick = (e: Event) => {
         console.log("=== PATH CLICK EVENT FIRED ===");
+        // Prevent click if we just finished dragging
+        if (wasDraggingRef.current) {
+          e.stopPropagation();
+          e.preventDefault();
+          wasDraggingRef.current = false; // Reset for next interaction
+          return;
+        }
+        
         e.stopPropagation();
         e.preventDefault();
 
         const target = e.target as SVGPathElement;
         const countryName = getCountryName(target);
 
-        console.log("Country name found:", countryName);
         if (countryName) {
-          console.log("Calling handleCountryClick with:", countryName);
           handlersRef.current.handleCountryClick(countryName);
-        } else {
-          console.log("No country name found for target:", target);
         }
       };
 
@@ -1473,6 +1479,75 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
     setZoom(1);
     setPan({ x: 0, y: 0 });
   };
+
+  // Setup drag handlers using native events to not interfere with path clicks
+  useEffect(() => {
+    // Add a small delay to ensure the container is fully rendered
+    const timeoutId = setTimeout(() => {
+      const container = mapContainerRef.current;
+      if (!container) return;
+
+      let localMouseDownPos: { x: number; y: number } | null = null;
+      let localDragStart: { x: number; y: number } = { x: 0, y: 0 };
+      let localIsDragging = false;
+
+      const handleNativeMouseDown = (e: MouseEvent) => {
+        localMouseDownPos = { x: e.clientX, y: e.clientY };
+        setPan((currentPan) => {
+          localDragStart = { x: e.clientX - currentPan.x, y: e.clientY - currentPan.y };
+          return currentPan;
+        });
+        wasDraggingRef.current = false;
+      };
+
+      const handleNativeMouseMove = (e: MouseEvent) => {
+        if (localMouseDownPos) {
+          const deltaX = Math.abs(e.clientX - localMouseDownPos.x);
+          const deltaY = Math.abs(e.clientY - localMouseDownPos.y);
+          const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+          if (distance > 5) {
+            if (!localIsDragging) {
+              localIsDragging = true;
+              setIsDragging(true);
+            }
+            wasDraggingRef.current = true;
+
+            setPan({
+              x: e.clientX - localDragStart.x,
+              y: e.clientY - localDragStart.y,
+            });
+          }
+        }
+      };
+
+      const handleNativeMouseUp = () => {
+        localIsDragging = false;
+        setIsDragging(false);
+        localMouseDownPos = null;
+
+        setTimeout(() => {
+          wasDraggingRef.current = false;
+        }, 50);
+      };
+
+      const handleNativeMouseLeave = () => {
+        localIsDragging = false;
+        setIsDragging(false);
+        localMouseDownPos = null;
+        wasDraggingRef.current = false;
+      };
+
+      container.addEventListener('mousedown', handleNativeMouseDown);
+      container.addEventListener('mousemove', handleNativeMouseMove);
+      container.addEventListener('mouseup', handleNativeMouseUp);
+      container.addEventListener('mouseleave', handleNativeMouseLeave);
+    }, 100);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, []);
 
   const zoomIn = () => {
     setZoom(Math.min(5, zoom * 1.2));
@@ -1934,9 +2009,12 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
         ref={mapContainerRef}
         className="svg-container"
         onWheel={handleWheel}
+        style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
         onClick={(e) => {
+          // This handler is for clicking on the container itself (not paths)
+          // Path clicks are handled by addEventListener in the useEffect
           const target = e.target as SVGPathElement;
-          console.log("Clicked element:", target.tagName, target); // Debug log
+          console.log("Container click - target:", target.tagName);
           if (target.tagName === "path" || target.tagName === "PATH") {
             // Extract country name from the data-country attribute we added
             const countryName =
@@ -1984,7 +2062,7 @@ const SVGWorldMap: React.FC<SVGWorldMapProps> = ({
           style={{
             transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             transformOrigin: "center center",
-            transition: "transform 0.1s ease-out",
+            transition: isDragging ? 'none' : "transform 0.1s ease-out",
             width: "100%",
             height: "100%",
           }}

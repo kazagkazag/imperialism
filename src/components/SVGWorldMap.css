@@ -532,7 +532,12 @@
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  cursor: default;
+  cursor: grab;
+  user-select: none; /* Prevent text selection while dragging */
+}
+
+.svg-container:active {
+  cursor: grabbing;
 }
 
 /* SVG Map Container */
